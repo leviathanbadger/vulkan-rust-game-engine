@@ -1,28 +1,4 @@
-
-
-fn prime_sieve(max: usize) -> Vec<i32> {
-    // let data = Vec::<bool>::new();
-    // data.resize(max as usize, true);
-    let mut data = vec![true; max + 1]; //Pretending to be 1-indexed instead of 0-indexed to keep logic readable
-    data[0] = false;
-    data[1] = false;
-
-    let mut primes = vec![0 as i32; 0];
-
-    for q in 2..max {
-        if data[q] {
-            primes.push(q as i32);
-            let mut w = q * 2;
-            loop {
-                if w >= data.len() { break; }
-                data[w] = false;
-                w += q;
-            }
-        }
-    }
-
-    primes
-}
+use crate::util::{prime_sieve};
 
 fn largest_prime_factor(of_num: i64) -> i32 {
     let max_check = f32::floor(f32::sqrt(of_num as f32)) as usize;
