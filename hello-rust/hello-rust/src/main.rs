@@ -6,6 +6,7 @@ mod euler5;
 mod euler6;
 mod euler7;
 mod euler8;
+mod euler9;
 mod util;
 
 fn main() {
@@ -17,4 +18,5 @@ fn main() {
     // time!(euler6::euler6());
     // time!(euler7::euler7());
     // time!(euler8::euler8());
+    // time!(euler9::euler9());
 }

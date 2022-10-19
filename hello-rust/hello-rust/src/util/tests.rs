@@ -16,5 +16,20 @@ macro_rules! test_cases {
             }
         )*
         }
+    };
+
+    ( $name:ident , [ $( ( $case_name:ident , $expected:expr ) ),* ] , ( $expected_ident:ident ) $fn:block ) => {
+        mod $name {
+            #[allow(unused_imports)]
+            use super::*;
+        $(
+            #[test]
+            fn $case_name() {
+                let $expected_ident = $expected;
+
+                $fn
+            }
+        )*
+        }
     }
 }
