@@ -1,3 +1,5 @@
+mod tests;
+
 use crate::util::{prime_sieve};
 
 fn nth_prime(n: usize) -> i32 {
@@ -13,7 +15,8 @@ fn nth_prime(n: usize) -> i32 {
 }
 
 #[allow(dead_code)]
-pub fn euler7() {
-    let answer = nth_prime(10001 - 1); //0-indexed, so have to subtract 1
-    println!("Euler 7: {}", answer);
+pub fn euler7() -> i32 {
+    let result = nth_prime(10001 - 1); //0-indexed, so have to subtract 1
+
+    result
 }

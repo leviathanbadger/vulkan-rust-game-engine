@@ -1,4 +1,4 @@
-
+mod tests;
 
 fn smallest_multiple(n: i32) -> i64 {
     assert!(n <= 20);
@@ -24,7 +24,8 @@ fn smallest_multiple(n: i32) -> i64 {
 }
 
 #[allow(dead_code)]
-pub fn euler5() {
-    let answer = smallest_multiple(20);
-    println!("Euler 5: {}", answer);
+pub fn euler5() -> i64 {
+    let result = smallest_multiple(20);
+
+    result
 }

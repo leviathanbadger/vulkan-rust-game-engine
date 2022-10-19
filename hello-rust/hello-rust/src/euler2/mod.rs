@@ -1,13 +1,13 @@
-
+mod tests;
 
 fn fib(mut n: i32) -> i32 {
-    if n == 0 {
+    if n < 2 {
         1
-    } else if n == 1 {
+    } else if n == 2 {
         2
     } else {
         let mut a = 1;
-        let mut b = 2;
+        let mut b = 1;
         while n > 1 {
             let tmp = a + b;
             a = b;
@@ -31,7 +31,8 @@ fn sum_even_valued_fib(up_to: i32) -> i32 {
 }
 
 #[allow(dead_code)]
-pub fn euler2() {
-    let sum = sum_even_valued_fib(4000000);
-    println!("Euler 2: {}", sum);
+pub fn euler2() -> i32 {
+    let result = sum_even_valued_fib(4000000);
+
+    result
 }

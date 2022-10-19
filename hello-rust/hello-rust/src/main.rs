@@ -5,7 +5,6 @@ mod euler4;
 mod euler5;
 mod euler6;
 mod euler7;
-mod time;
 mod util;
 
 fn main() {

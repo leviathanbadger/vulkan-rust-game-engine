@@ -6,11 +6,14 @@ macro_rules! time {
         {
             use std::time::{Instant};
 
+            println!();
+            println!("Executing {:?}...", stringify!($x));
+
             let start = Instant::now();
             let result = { $x };
             let duration = start.elapsed();
 
-            println!("Time elapsed (for {}): {:?}", stringify!($x), duration);
+            println!("{}; result: {:?}; time elapsed: {:?}", stringify!($x), result, duration);
 
             result
         }

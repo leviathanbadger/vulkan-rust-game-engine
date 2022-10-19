@@ -1,10 +1,10 @@
-
+mod tests;
 
 fn is_palindromic(slice: &[i32]) -> bool {
     let max = slice.len() / 2;
     let mut is_palindromic = true;
 
-    for q in 0..(max + 1) {
+    for q in 0..max {
         if slice[q] != slice[slice.len() - 1 - q] {
             is_palindromic = false;
             break;
@@ -41,7 +41,8 @@ fn largest_palindrome_product(min: i32, max: i32) -> i32 {
 }
 
 #[allow(dead_code)]
-pub fn euler4() {
-    let answer = largest_palindrome_product(100, 999);
-    println!("Euler 4: {}", answer);
+pub fn euler4() -> i32 {
+    let result = largest_palindrome_product(100, 999);
+
+    result
 }

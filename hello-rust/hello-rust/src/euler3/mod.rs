@@ -1,3 +1,5 @@
+mod tests;
+
 use crate::util::{prime_sieve};
 
 fn largest_prime_factor(of_num: i64) -> i32 {
@@ -22,7 +24,8 @@ fn largest_prime_factor(of_num: i64) -> i32 {
 }
 
 #[allow(dead_code)]
-pub fn euler3() {
-    let answer = largest_prime_factor(600851475143i64);
-    println!("Euler 3: {}", answer);
+pub fn euler3() -> i32 {
+    let result = largest_prime_factor(600851475143i64);
+
+    result
 }
