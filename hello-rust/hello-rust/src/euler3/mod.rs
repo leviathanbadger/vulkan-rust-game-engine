@@ -25,7 +25,7 @@ fn largest_prime_factor(of_num: i64) -> i32 {
 
 #[allow(dead_code)]
 pub fn euler3() -> i32 {
-    let result = largest_prime_factor(600851475143i64);
+    let result = largest_prime_factor(600851475143_i64);
 
     result
 }

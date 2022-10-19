@@ -32,7 +32,7 @@ fn sum_even_valued_fib(up_to: i32) -> i32 {
 
 #[allow(dead_code)]
 pub fn euler2() -> i32 {
-    let result = sum_even_valued_fib(4000000);
+    let result = sum_even_valued_fib(4_000_000);
 
     result
 }
