@@ -5,10 +5,10 @@ use crate::test_cases;
 
 #[test]
 fn euler1_should_return_correct_result() {
-    let result = euler1();
+    const RESULT: i32 = euler1();
 
     let expected = 233168;
-    assert_eq!(result, expected);
+    assert_eq!(RESULT, expected);
 }
 
 test_cases!(sum_multiples_should_return_correct_value, [
