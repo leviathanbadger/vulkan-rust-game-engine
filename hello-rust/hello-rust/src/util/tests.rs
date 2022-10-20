@@ -33,3 +33,18 @@ macro_rules! test_cases {
         }
     }
 }
+
+#[macro_export]
+macro_rules! assert_iter_eq {
+    ( $results:expr , $expected:expr ) => {
+        {
+            let expected = { $expected };
+            let len = expected.len();
+            let mut iter =  { $results };
+            for q in 0..len {
+                assert_eq!(iter.next(), Some(expected[q]));
+            }
+            assert_eq!(iter.next(), None);
+        }
+    };
+}
