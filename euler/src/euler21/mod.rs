@@ -1,25 +1,6 @@
 mod tests;
 
-fn sum_proper_divisors(n: i32) -> i32 {
-    if n <= 1 {
-        return 0;
-    }
-
-    let mut sum = 1;
-
-    let sqrt = f32::ceil(f32::sqrt(n as f32)) as i32;
-    for q in 2..sqrt {
-        if n % q == 0 {
-            sum += q + (n / q);
-        }
-    }
-
-    if sqrt * sqrt == n {
-        sum += sqrt;
-    }
-
-    sum
-}
+use crate::util::{sum_proper_divisors};
 
 fn get_amicable_number_pair(a: i32) -> Option<(i32, i32)> {
     let b = sum_proper_divisors(a);

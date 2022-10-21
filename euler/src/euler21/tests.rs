@@ -29,11 +29,3 @@ test_cases!(get_amicable_number_pair_should_return_correct_values_invalid, [
     let result1 = get_amicable_number_pair(a);
     assert_eq!(result1, None);
 });
-
-test_cases!(sum_proper_divisors_should_return_correct_values, [
-    (euler_sample_220, 220, 284),
-    (euler_sample_284, 284, 220)
-], (a, expected) {
-    let result = sum_proper_divisors(a);
-    assert_eq!(result, expected);
-});
