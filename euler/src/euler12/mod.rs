@@ -35,7 +35,7 @@ fn divisor_count(n: i32) -> i32 {
     }
 
     if sqrt * sqrt == n {
-        count += 1
+        count += 1;
     }
 
     count
