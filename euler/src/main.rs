@@ -18,6 +18,7 @@ mod euler17;
 mod euler18;
 mod euler20;
 mod euler21;
+mod euler22;
 mod euler67;
 mod util;
 
@@ -42,5 +43,6 @@ fn main() {
     // time!(euler18::euler18());
     // time!(euler20::euler20());
     // time!(euler21::euler21());
+    // time!(euler22::euler22());
     // time!(euler67::euler67());
 }
