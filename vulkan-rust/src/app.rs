@@ -11,7 +11,7 @@ use vulkanalia::{
     loader::{LibloadingLoader, LIBRARY},
     window as vk_window,
     prelude::v1_0::*,
-    vk::{ExtDebugUtilsExtension, StringArray}
+    vk::{ExtDebugUtilsExtension, KhrSurfaceExtension, StringArray}
 };
 
 const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
@@ -21,7 +21,8 @@ const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_L
 pub struct AppData {
     messenger: Option<vk::DebugUtilsMessengerEXT>,
     physical_device: Option<vk::PhysicalDevice>,
-    graphics_queue: Option<vk::Queue>
+    graphics_queue: Option<vk::Queue>,
+    surface: Option<vk::SurfaceKHR>
 }
 
 #[derive(Debug, Error)]
@@ -82,6 +83,10 @@ impl App {
         let loader = LibloadingLoader::new(LIBRARY)?;
         let entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
         let inst = Self::create_instance(initial_title, &window, &entry, &mut app_data)?;
+
+        debug!("Creating Vulkan surface KHR.");
+        app_data.surface = Some(vk_window::create_surface(&inst, &window)?);
+
         Self::select_graphics_card(&inst, &mut app_data)?;
         let device = Self::create_logical_device(&inst, &mut app_data)?;
 
@@ -316,7 +321,13 @@ impl App {
     pub fn destroy(&mut self) {
         unsafe {
             debug!("Destroying Vulkan logical device.");
+            self.device.device_wait_idle().unwrap();
             self.device.destroy_device(None);
+
+            if let Some(surface) = self.app_data.surface.take() {
+                debug!("Destroying Vulkan surface KHR");
+                self.inst.destroy_surface_khr(surface, None);
+            }
 
             if let Some(messenger) = self.app_data.messenger.take() {
                 debug!("Destroying Vulkan debug utils messenger. Additional Vulkan messages may not be logged");
