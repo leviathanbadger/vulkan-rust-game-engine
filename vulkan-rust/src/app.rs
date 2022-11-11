@@ -1,5 +1,6 @@
 use std::{collections::{HashSet}, os::raw::c_void, ffi::CStr};
 use anyhow::{anyhow, Result};
+use thiserror::Error;
 use winit::{
     dpi::{LogicalSize},
     window::{Window, WindowBuilder},
@@ -17,7 +18,42 @@ const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_L
 
 #[derive(Debug, Default)]
 pub struct AppData {
-    messenger: Option<vk::DebugUtilsMessengerEXT>
+    messenger: Option<vk::DebugUtilsMessengerEXT>,
+    physical_device: Option<vk::PhysicalDevice>
+}
+
+#[derive(Debug, Error)]
+#[error("Missing {0}")]
+pub struct GraphicsCardSuitabilityError(pub &'static str);
+
+#[derive(Copy, Clone, Debug)]
+#[allow(dead_code)]
+pub struct QueueFamilyIndices {
+    graphics: Option<u32>,
+    compute: Option<u32>,
+    transfer: Option<u32>,
+    sparse_binding: Option<u32>,
+    protected: Option<u32>
+}
+
+impl QueueFamilyIndices {
+    unsafe fn get(inst: &Instance, _app_data: &AppData, physical_device: vk::PhysicalDevice) -> Result<Self> {
+        let properties = inst.get_physical_device_queue_family_properties(physical_device);
+
+        let graphics = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::GRAPHICS)).map(|i| i as u32);
+        let compute = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::COMPUTE)).map(|i| i as u32);
+        let transfer = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::TRANSFER)).map(|i| i as u32);
+        let sparse_binding = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::SPARSE_BINDING)).map(|i| i as u32);
+        let protected = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::PROTECTED)).map(|i| i as u32);
+
+        Ok(Self {
+            graphics,
+            compute,
+            transfer,
+            sparse_binding,
+            protected
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -26,7 +62,7 @@ pub struct App {
     pub window: Window,
     pub entry: Entry,
     pub inst: Instance,
-    pub app_data: AppData
+    pub app_data: AppData,
 }
 
 impl App {
@@ -43,6 +79,7 @@ impl App {
         let loader = LibloadingLoader::new(LIBRARY)?;
         let entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
         let inst = Self::create_instance(initial_title, &window, &entry, &mut app_data)?;
+        Self::select_graphics_card(&inst, &mut app_data)?;
 
         Ok(Self {
             event_loop: Some(event_loop),
@@ -155,6 +192,39 @@ impl App {
         }
 
         Ok(inst)
+    }
+
+    unsafe fn select_graphics_card(inst: &Instance, app_data: &mut AppData) -> Result<()> {
+        let physical_devices = inst.enumerate_physical_devices()?;
+
+        for physical_device in physical_devices {
+            let properties = inst.get_physical_device_properties(physical_device);
+
+            if let Err(error) = Self::check_graphics_card(inst, app_data, physical_device) {
+                warn!("Skipping graphics card ({} - {}): {}", physical_device.as_raw(), properties.device_name, error);
+            } else {
+                //TODO: select _best_ graphics card, not just the first one in the list
+                info!("Using graphics card ({} - {}).", physical_device.as_raw(), properties.device_name);
+                app_data.physical_device = Some(physical_device);
+                return Ok(());
+            }
+        }
+
+        Err(anyhow!(GraphicsCardSuitabilityError("No suitable graphics card was found")))
+    }
+
+    unsafe fn check_graphics_card(inst: &Instance, app_data: &AppData, physical_device: vk::PhysicalDevice) -> Result<()> {
+        let _properties = inst.get_physical_device_properties(physical_device);
+        let _features = inst.get_physical_device_features(physical_device);
+
+        //TODO: determine what base properties and features are required to run this engine. Heh
+
+        let queue_family_indices = QueueFamilyIndices::get(inst, app_data, physical_device)?;
+        if let None = queue_family_indices.graphics {
+            return Err(anyhow!(GraphicsCardSuitabilityError("No queue family on this physical device supports graphics operations.")));
+        }
+
+        Ok(())
     }
 
     pub fn run(mut self) -> ! {

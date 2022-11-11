@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = "1"
 log = "0.4"
 pretty_env_logger = "0.4"
+thiserror = "1"
 vulkanalia = { version = "=0.12.0", features = ["libloading", "window"] }
 winit = "0.24"
 ctrlc = { version = "3.2", features = ["termination"] }
