@@ -10,7 +10,8 @@ use winit::{
 use vulkanalia::{
     loader::{LibloadingLoader, LIBRARY},
     window as vk_window,
-    prelude::v1_0::*, vk::ExtDebugUtilsExtension
+    prelude::v1_0::*,
+    vk::{ExtDebugUtilsExtension, StringArray}
 };
 
 const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
@@ -129,16 +130,16 @@ impl App {
             .api_version(vk::make_version(0, 0, 1));
         trace!("Vulkan app_info created to present to create_instance. App Name: {:?}; Engine Name: {:?}", CStr::from_ptr(app_info.application_name), CStr::from_ptr(app_info.engine_name));
 
-        let mut request_layers = vec![];
+        let mut request_layers_ptrs = vec![];
 
-        let mut request_extensions = vk_window::get_required_instance_extensions(window)
+        let mut request_extensions_ptrs = vk_window::get_required_instance_extensions(window)
             .iter()
-            .map(|n| *n.clone())
+            .map(|n| n.as_ptr())
             .collect::<Vec<_>>();
 
         if VALIDATION_ENABLED {
-            request_layers.push(VALIDATION_LAYER);
-            request_extensions.push(vk::EXT_DEBUG_UTILS_EXTENSION.name);
+            request_layers_ptrs.push(VALIDATION_LAYER.as_ptr());
+            request_extensions_ptrs.push(vk::EXT_DEBUG_UTILS_EXTENSION.name.as_ptr());
         }
 
         let available_layers = entry
@@ -146,15 +147,17 @@ impl App {
             .iter()
             .map(|l| l.layer_name)
             .collect::<HashSet<_>>();
-        debug!("Available Vulkan layers: {:?}", available_layers);
-        debug!("Requesting Vulkan layers: {:?}", request_layers);
+        let request_layers = request_layers_ptrs
+            .iter()
+            .map(|name| CStr::from_ptr(*name))
+            .collect::<Vec<_>>();
+        info!("Available Vulkan layers: {:?}", available_layers);
+        info!("Requesting Vulkan layers: {:?}", request_layers);
 
-        let mut request_layers_ptrs = vec![];
         for layer in request_layers {
-            if !available_layers.contains(&layer) {
-                return Err(anyhow!("Vulkan layer (\"{}\") requested but not supported.", layer));
+            if !available_layers.contains(&StringArray::from_cstr(layer)) {
+                return Err(anyhow!("Vulkan layer (\"{:?}\") requested but not supported.", layer));
             }
-            request_layers_ptrs.push(layer.as_ptr());
         }
 
         let available_extensions = entry
@@ -162,19 +165,21 @@ impl App {
             .iter()
             .map(|e| e.extension_name)
             .collect::<HashSet<_>>();
-        debug!("Available Vulkan extensions: {:?}", available_extensions);
-        debug!("Requesting Vulkan extensions: {:?}", request_extensions);
+        let request_extensions = request_extensions_ptrs
+            .iter()
+            .map(|name| CStr::from_ptr(*name))
+            .collect::<Vec<_>>();
+        info!("Available Vulkan extensions: {:?}", available_extensions);
+        info!("Requesting Vulkan extensions: {:?}", request_extensions);
 
-        let mut request_extensions_ptrs = vec![];
         for ext in request_extensions {
-            if !available_extensions.contains(&ext) {
-                return Err(anyhow!("Vulkan extension (\"{}\") requested but not supported.", ext));
+            if !available_extensions.contains(&StringArray::from_cstr(ext)) {
+                return Err(anyhow!("Vulkan extension (\"{:?}\") requested but not supported.", ext));
             }
-            request_extensions_ptrs.push(ext.as_ptr());
         }
 
         debug!("Creating Vulkan instance with requested layers and extensions.");
-        let mut info = vk::InstanceCreateInfo::builder()
+        let mut inst_info = vk::InstanceCreateInfo::builder()
             .application_info(&app_info)
             .enabled_layer_names(&request_layers_ptrs)
             .enabled_extension_names(&request_extensions_ptrs);
@@ -185,10 +190,10 @@ impl App {
             .user_callback(Some(Self::debug_callback));
 
         if VALIDATION_ENABLED {
-            info = info.push_next(&mut debug_info);
+            inst_info = inst_info.push_next(&mut debug_info);
         }
 
-        let inst = entry.create_instance(&info, None)?;
+        let inst = entry.create_instance(&inst_info, None)?;
 
         if VALIDATION_ENABLED {
             debug!("Creating Vulkan debug utils messenger. Future validation/error/diagnostics from Vulkan will be logged.");
