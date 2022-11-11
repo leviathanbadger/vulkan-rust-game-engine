@@ -19,7 +19,8 @@ const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_L
 #[derive(Debug, Default)]
 pub struct AppData {
     messenger: Option<vk::DebugUtilsMessengerEXT>,
-    physical_device: Option<vk::PhysicalDevice>
+    physical_device: Option<vk::PhysicalDevice>,
+    graphics_queue: Option<vk::Queue>
 }
 
 #[derive(Debug, Error)]
@@ -37,7 +38,7 @@ pub struct QueueFamilyIndices {
 }
 
 impl QueueFamilyIndices {
-    unsafe fn get(inst: &Instance, _app_data: &AppData, physical_device: vk::PhysicalDevice) -> Result<Self> {
+    unsafe fn get(inst: &Instance, physical_device: vk::PhysicalDevice) -> Result<Self> {
         let properties = inst.get_physical_device_queue_family_properties(physical_device);
 
         let graphics = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::GRAPHICS)).map(|i| i as u32);
@@ -62,6 +63,7 @@ pub struct App {
     pub window: Window,
     pub entry: Entry,
     pub inst: Instance,
+    pub device: Device,
     pub app_data: AppData,
 }
 
@@ -80,12 +82,14 @@ impl App {
         let entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
         let inst = Self::create_instance(initial_title, &window, &entry, &mut app_data)?;
         Self::select_graphics_card(&inst, &mut app_data)?;
+        let device = Self::create_logical_device(&inst, &mut app_data)?;
 
         Ok(Self {
             event_loop: Some(event_loop),
             window,
             entry,
             inst,
+            device,
             app_data
         })
     }
@@ -100,13 +104,13 @@ impl App {
         let message = unsafe { CStr::from_ptr(data.message) }.to_string_lossy();
 
         if severity >= vk::DebugUtilsMessageSeverityFlagsEXT::ERROR {
-            error!("({:?}) {}", _type, message);
+            error!("[Vulkan DebugUtils: {:?}] {}", _type, message);
         } else if severity >= vk::DebugUtilsMessageSeverityFlagsEXT::WARNING {
-            warn!("({:?}) {}", _type, message);
+            warn!("[Vulkan DebugUtils: {:?}] {}", _type, message);
         } else if severity >= vk::DebugUtilsMessageSeverityFlagsEXT::INFO {
-            debug!("({:?}) {}", _type, message);
+            debug!("[Vulkan DebugUtils: {:?}] {}", _type, message);
         } else {
-            trace!("({:?}) {}", _type, message);
+            trace!("[Vulkan DebugUtils: {:?}] {}", _type, message);
         }
 
         vk::FALSE
@@ -213,18 +217,68 @@ impl App {
         Err(anyhow!(GraphicsCardSuitabilityError("No suitable graphics card was found")))
     }
 
-    unsafe fn check_graphics_card(inst: &Instance, app_data: &AppData, physical_device: vk::PhysicalDevice) -> Result<()> {
+    unsafe fn check_graphics_card(inst: &Instance, _app_data: &AppData, physical_device: vk::PhysicalDevice) -> Result<()> {
         let _properties = inst.get_physical_device_properties(physical_device);
         let _features = inst.get_physical_device_features(physical_device);
 
         //TODO: determine what base properties and features are required to run this engine. Heh
 
-        let queue_family_indices = QueueFamilyIndices::get(inst, app_data, physical_device)?;
+        let queue_family_indices = QueueFamilyIndices::get(inst, physical_device)?;
         if let None = queue_family_indices.graphics {
             return Err(anyhow!(GraphicsCardSuitabilityError("No queue family on this physical device supports graphics operations.")));
         }
 
         Ok(())
+    }
+
+    unsafe fn create_logical_device(inst: &Instance, app_data: &mut AppData) -> Result<Device> {
+        let physical_device = app_data.physical_device.unwrap();
+        let indices = QueueFamilyIndices::get(&inst, physical_device)?;
+
+        let queue_priorities = &[1.0];
+        let graphics_queue_index = indices.graphics.unwrap();
+        let queue_info = vk::DeviceQueueCreateInfo::builder()
+            .queue_family_index(graphics_queue_index)
+            .queue_priorities(queue_priorities);
+        let queue_infos = &[queue_info];
+
+        let mut request_layers = vec![];
+
+        if VALIDATION_ENABLED {
+            request_layers.push(VALIDATION_LAYER);
+        }
+
+        let available_layers = inst
+            .enumerate_device_layer_properties(physical_device)?
+            .iter()
+            .map(|l| l.layer_name)
+            .collect::<HashSet<_>>();
+        debug!("Available Vulkan device layers: {:?}", available_layers);
+        debug!("Requesting Vulkan device layers: {:?}", request_layers);
+
+        let mut request_layers_ptrs = vec![];
+        for layer in request_layers {
+            if !available_layers.contains(&layer) {
+                return Err(anyhow!("Vulkan device layer (\"{}\") requested but not supported.", layer));
+            }
+            request_layers_ptrs.push(layer.as_ptr());
+        }
+
+        let features = vk::PhysicalDeviceFeatures::builder();
+
+        debug!("Creating Vulkan logical device with requested layers and features.");
+        let device_info = vk::DeviceCreateInfo::builder()
+            .queue_create_infos(queue_infos)
+            .enabled_layer_names(&request_layers_ptrs)
+            .enabled_features(&features);
+
+        let device = inst.create_device(physical_device, &device_info, None)?;
+
+        let graphics_queue = device.get_device_queue(graphics_queue_index, 0);
+        app_data.graphics_queue = Some(graphics_queue);
+        debug!("Vulkan graphics queue handle: {}", graphics_queue.as_raw());
+
+        Ok(device)
     }
 
     pub fn run(mut self) -> ! {
@@ -256,10 +310,14 @@ impl App {
 
     pub fn destroy(&mut self) {
         unsafe {
+            debug!("Destroying Vulkan logical device.");
+            self.device.destroy_device(None);
+
             if let Some(messenger) = self.app_data.messenger.take() {
                 debug!("Destroying Vulkan debug utils messenger. Additional Vulkan messages may not be logged");
                 self.inst.destroy_debug_utils_messenger_ext(messenger, None);
             }
+
             debug!("Destroying Vulkan instance.");
             self.inst.destroy_instance(None);
         }
