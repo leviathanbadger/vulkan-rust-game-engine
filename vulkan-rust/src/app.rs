@@ -22,6 +22,7 @@ pub struct AppData {
     messenger: Option<vk::DebugUtilsMessengerEXT>,
     physical_device: Option<vk::PhysicalDevice>,
     graphics_queue: Option<vk::Queue>,
+    present_queue: Option<vk::Queue>,
     surface: Option<vk::SurfaceKHR>
 }
 
@@ -30,31 +31,42 @@ pub struct AppData {
 pub struct GraphicsCardSuitabilityError(pub &'static str);
 
 #[derive(Copy, Clone, Debug)]
-#[allow(dead_code)]
 pub struct QueueFamilyIndices {
     graphics: Option<u32>,
-    compute: Option<u32>,
-    transfer: Option<u32>,
-    sparse_binding: Option<u32>,
-    protected: Option<u32>
+    present: Option<u32>,
+    // compute: Option<u32>,
+    // transfer: Option<u32>,
+    // sparse_binding: Option<u32>,
+    // protected: Option<u32>
 }
 
 impl QueueFamilyIndices {
-    unsafe fn get(inst: &Instance, physical_device: vk::PhysicalDevice) -> Result<Self> {
+    unsafe fn get(inst: &Instance, app_data: &AppData, physical_device: vk::PhysicalDevice) -> Result<Self> {
         let properties = inst.get_physical_device_queue_family_properties(physical_device);
 
         let graphics = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::GRAPHICS)).map(|i| i as u32);
-        let compute = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::COMPUTE)).map(|i| i as u32);
-        let transfer = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::TRANSFER)).map(|i| i as u32);
-        let sparse_binding = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::SPARSE_BINDING)).map(|i| i as u32);
-        let protected = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::PROTECTED)).map(|i| i as u32);
+        // let compute = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::COMPUTE)).map(|i| i as u32);
+        // let transfer = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::TRANSFER)).map(|i| i as u32);
+        // let sparse_binding = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::SPARSE_BINDING)).map(|i| i as u32);
+        // let protected = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::PROTECTED)).map(|i| i as u32);
+
+        let mut present = None;
+        if let Some(surface) = app_data.surface {
+            for (index, _) in properties.iter().enumerate() {
+                if let Ok(_) = inst.get_physical_device_surface_support_khr(physical_device, index as u32, surface) {
+                    present = Some(index as u32);
+                    break;
+                }
+            }
+        }
 
         Ok(Self {
             graphics,
-            compute,
-            transfer,
-            sparse_binding,
-            protected
+            present,
+            // compute,
+            // transfer,
+            // sparse_binding,
+            // protected
         })
     }
 }
@@ -227,15 +239,18 @@ impl App {
         Err(anyhow!(GraphicsCardSuitabilityError("No suitable graphics card was found")))
     }
 
-    unsafe fn check_graphics_card(inst: &Instance, _app_data: &AppData, physical_device: vk::PhysicalDevice) -> Result<()> {
+    unsafe fn check_graphics_card(inst: &Instance, app_data: &AppData, physical_device: vk::PhysicalDevice) -> Result<()> {
         let _properties = inst.get_physical_device_properties(physical_device);
         let _features = inst.get_physical_device_features(physical_device);
 
         //TODO: determine what base properties and features are required to run this engine. Heh
 
-        let queue_family_indices = QueueFamilyIndices::get(inst, physical_device)?;
+        let queue_family_indices = QueueFamilyIndices::get(inst, app_data, physical_device)?;
         if let None = queue_family_indices.graphics {
             return Err(anyhow!(GraphicsCardSuitabilityError("No queue family on this physical device supports graphics operations.")));
+        }
+        if let None = queue_family_indices.present {
+            return Err(anyhow!(GraphicsCardSuitabilityError("No queue family on this physical device supports KHR present operations.")));
         }
 
         Ok(())
@@ -243,14 +258,23 @@ impl App {
 
     unsafe fn create_logical_device(inst: &Instance, app_data: &mut AppData) -> Result<Device> {
         let physical_device = app_data.physical_device.unwrap();
-        let indices = QueueFamilyIndices::get(&inst, physical_device)?;
+        let indices = QueueFamilyIndices::get(&inst, app_data, physical_device)?;
+
+        let mut unique_queue_family_indices = HashSet::new();
+        let graphics_queue_index = indices.graphics.unwrap();
+        let present_queue_index = indices.present.unwrap();
+        unique_queue_family_indices.insert(graphics_queue_index);
+        unique_queue_family_indices.insert(present_queue_index);
 
         let queue_priorities = &[1.0];
-        let graphics_queue_index = indices.graphics.unwrap();
-        let queue_info = vk::DeviceQueueCreateInfo::builder()
-            .queue_family_index(graphics_queue_index)
-            .queue_priorities(queue_priorities);
-        let queue_infos = &[queue_info];
+        let queue_infos = unique_queue_family_indices
+            .iter()
+            .map(|i| {
+                vk::DeviceQueueCreateInfo::builder()
+                    .queue_family_index(*i)
+                    .queue_priorities(queue_priorities)
+            })
+            .collect::<Vec<_>>();
 
         let mut request_layers = vec![];
 
@@ -278,7 +302,7 @@ impl App {
 
         debug!("Creating Vulkan logical device with requested layers and features.");
         let device_info = vk::DeviceCreateInfo::builder()
-            .queue_create_infos(queue_infos)
+            .queue_create_infos(&queue_infos)
             .enabled_layer_names(&request_layers_ptrs)
             .enabled_features(&features);
 
@@ -287,6 +311,10 @@ impl App {
         let graphics_queue = device.get_device_queue(graphics_queue_index, 0);
         app_data.graphics_queue = Some(graphics_queue);
         debug!("Vulkan graphics queue handle: {}", graphics_queue.as_raw());
+
+        let present_queue = device.get_device_queue(present_queue_index, 0);
+        app_data.present_queue = Some(present_queue);
+        debug!("Vulkan KHR present queue handle: {}", present_queue.as_raw());
 
         Ok(device)
     }
