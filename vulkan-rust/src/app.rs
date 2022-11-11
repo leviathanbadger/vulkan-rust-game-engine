@@ -15,7 +15,7 @@ use vulkanalia::{
 const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
 const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AppData {
     messenger: Option<vk::DebugUtilsMessengerEXT>
 }
@@ -38,21 +38,11 @@ impl App {
             .with_inner_size(default_size)
             .build(&event_loop)?;
 
-        let mut app_data = AppData { messenger: None };
+        let mut app_data = AppData::default();
 
         let loader = LibloadingLoader::new(LIBRARY)?;
         let entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
-        let inst = Self::create_instance(initial_title, &window, &entry)?;
-
-        if VALIDATION_ENABLED {
-            debug!("Creating Vulkan debug utils messenger. Future validation/error/diagnostics from Vulkan will be logged.");
-            let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
-                .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
-                .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
-                .user_callback(Some(Self::debug_callback));
-
-            app_data.messenger = Some(inst.create_debug_utils_messenger_ext(&debug_info, None)?);
-        }
+        let inst = Self::create_instance(initial_title, &window, &entry, &mut app_data)?;
 
         Ok(Self {
             event_loop: Some(event_loop),
@@ -85,7 +75,7 @@ impl App {
         vk::FALSE
     }
 
-    unsafe fn create_instance(initial_title: &str, window: &Window, entry: &Entry) -> Result<Instance> {
+    unsafe fn create_instance(initial_title: &str, window: &Window, entry: &Entry, app_data: &mut AppData) -> Result<Instance> {
         let mut zero_terminated: String = "".to_owned();
         zero_terminated.push_str(initial_title);
         zero_terminated.push_str("\0");
@@ -143,12 +133,28 @@ impl App {
         }
 
         debug!("Creating Vulkan instance with requested layers and extensions.");
-        let info = vk::InstanceCreateInfo::builder()
+        let mut info = vk::InstanceCreateInfo::builder()
             .application_info(&app_info)
             .enabled_layer_names(&request_layers_ptrs)
             .enabled_extension_names(&request_extensions_ptrs);
 
-        Ok(entry.create_instance(&info, None)?)
+        let mut debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+            .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
+            .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
+            .user_callback(Some(Self::debug_callback));
+
+        if VALIDATION_ENABLED {
+            info = info.push_next(&mut debug_info);
+        }
+
+        let inst = entry.create_instance(&info, None)?;
+
+        if VALIDATION_ENABLED {
+            debug!("Creating Vulkan debug utils messenger. Future validation/error/diagnostics from Vulkan will be logged.");
+            app_data.messenger = Some(inst.create_debug_utils_messenger_ext(&debug_info, None)?);
+        }
+
+        Ok(inst)
     }
 
     pub fn run(mut self) -> ! {
