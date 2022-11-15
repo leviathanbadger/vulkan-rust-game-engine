@@ -34,6 +34,9 @@ pub struct App {
     pub event_loop: Option<EventLoop<()>>,
     pub window: Window,
     pub app_data: AppData,
+    //entry can't be disposed of before inst or it causes a segmentation fault when you attempt to use inst
+    #[allow(unused)]
+    entry: Entry,
     pub inst: Instance,
     pub device: Device,
     pub bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>
@@ -52,8 +55,11 @@ impl App {
         let mut app_data = AppData::default();
 
         let inst: Instance;
+        let entry: Entry;
         unsafe {
-            inst = Self::create_instance(initial_title, &bootstrap_loaders, &window, &mut app_data)?;
+            let loader = LibloadingLoader::new(LIBRARY)?;
+            entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
+            inst = Self::create_instance(initial_title, &bootstrap_loaders, &window, &mut app_data, &entry)?;
         }
 
         unsafe {
@@ -72,17 +78,15 @@ impl App {
             event_loop: Some(event_loop),
             window,
             app_data,
+            entry,
             inst,
             device,
             bootstrap_loaders: bootstrap_loaders
         })
     }
 
-    unsafe fn create_instance<'a>(initial_title: &str, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, window: &Window, app_data: &mut AppData) -> Result<Instance> {
+    unsafe fn create_instance<'a>(initial_title: &str, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, window: &Window, app_data: &mut AppData, entry: &Entry) -> Result<Instance> {
         debug!("Selecting instance extensions and layers, and creating instance.");
-        let loader = LibloadingLoader::new(LIBRARY)?;
-        let entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
-
         let mut zero_terminated: String = "".to_owned();
         zero_terminated.push_str(initial_title);
         zero_terminated.push_str("\0");
