@@ -1,4 +1,4 @@
-use std::{collections::{HashSet}, os::raw::c_void, ffi::CStr};
+use std::{collections::{HashSet}, ffi::CStr};
 use anyhow::{anyhow, Result};
 use thiserror::Error;
 use winit::{
@@ -11,80 +11,39 @@ use vulkanalia::{
     loader::{LibloadingLoader, LIBRARY},
     window as vk_window,
     prelude::v1_0::*,
-    vk::{ExtDebugUtilsExtension, KhrSurfaceExtension, StringArray}
+    vk::{KhrSurfaceExtension, StringArray}
 };
 
-const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
-const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
+use crate::bootstrap::{BootstrapLoader, queue_family_indices::QueueFamilyIndices};
 
 #[derive(Debug, Default)]
 pub struct AppData {
-    messenger: Option<vk::DebugUtilsMessengerEXT>,
+    pub messenger: Option<vk::DebugUtilsMessengerEXT>,
     physical_device: Option<vk::PhysicalDevice>,
     graphics_queue: Option<vk::Queue>,
     present_queue: Option<vk::Queue>,
-    surface: Option<vk::SurfaceKHR>
+    pub surface: Option<vk::SurfaceKHR>
 }
 
 #[derive(Debug, Error)]
 #[error("Missing {0}")]
 pub struct GraphicsCardSuitabilityError(pub &'static str);
 
-#[derive(Copy, Clone, Debug)]
-pub struct QueueFamilyIndices {
-    graphics: Option<u32>,
-    present: Option<u32>,
-    // compute: Option<u32>,
-    // transfer: Option<u32>,
-    // sparse_binding: Option<u32>,
-    // protected: Option<u32>
-}
-
-impl QueueFamilyIndices {
-    unsafe fn get(inst: &Instance, app_data: &AppData, physical_device: vk::PhysicalDevice) -> Result<Self> {
-        let properties = inst.get_physical_device_queue_family_properties(physical_device);
-
-        let graphics = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::GRAPHICS)).map(|i| i as u32);
-        // let compute = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::COMPUTE)).map(|i| i as u32);
-        // let transfer = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::TRANSFER)).map(|i| i as u32);
-        // let sparse_binding = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::SPARSE_BINDING)).map(|i| i as u32);
-        // let protected = properties.iter().position(|p| p.queue_flags.contains(vk::QueueFlags::PROTECTED)).map(|i| i as u32);
-
-        let mut present = None;
-        if let Some(surface) = app_data.surface {
-            for (index, _) in properties.iter().enumerate() {
-                if let Ok(_) = inst.get_physical_device_surface_support_khr(physical_device, index as u32, surface) {
-                    present = Some(index as u32);
-                    break;
-                }
-            }
-        }
-
-        Ok(Self {
-            graphics,
-            present,
-            // compute,
-            // transfer,
-            // sparse_binding,
-            // protected
-        })
-    }
-}
-
 #[derive(Debug)]
 pub struct App {
     pub event_loop: Option<EventLoop<()>>,
     pub window: Window,
-    pub entry: Entry,
+    pub app_data: AppData,
     pub inst: Instance,
     pub device: Device,
-    pub app_data: AppData,
+    pub bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>
 }
 
 impl App {
-    pub unsafe fn create(initial_title: &str, default_size: LogicalSize<i32>) -> Result<Self> {
+    pub fn create(initial_title: &'static str, default_size: LogicalSize<i32>, bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>) -> Result<Self> {
         debug!("Creating window and window event loop.");
         let event_loop = EventLoop::new();
+        //TODO: add support for fullscreen
         let window = WindowBuilder::new()
             .with_title(initial_title)
             .with_inner_size(default_size)
@@ -92,49 +51,38 @@ impl App {
 
         let mut app_data = AppData::default();
 
-        let loader = LibloadingLoader::new(LIBRARY)?;
-        let entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
-        let inst = Self::create_instance(initial_title, &window, &entry, &mut app_data)?;
+        let inst: Instance;
+        unsafe {
+            inst = Self::create_instance(initial_title, &bootstrap_loaders, &window, &mut app_data)?;
+        }
 
-        debug!("Creating Vulkan surface KHR.");
-        app_data.surface = Some(vk_window::create_surface(&inst, &window)?);
+        unsafe {
+            debug!("Creating Vulkan surface KHR.");
+            app_data.surface = Some(vk_window::create_surface(&inst, &window)?);
+        }
 
-        Self::select_graphics_card(&inst, &mut app_data)?;
-        let device = Self::create_logical_device(&inst, &mut app_data)?;
+        let device: Device;
+        unsafe {
+            debug!("Selecting graphics card (physical device) and creating logical device.");
+            Self::select_graphics_card(&inst, &mut app_data)?;
+            device = Self::create_logical_device(&inst, &bootstrap_loaders, &mut app_data)?;
+        }
 
         Ok(Self {
             event_loop: Some(event_loop),
             window,
-            entry,
+            app_data,
             inst,
             device,
-            app_data
+            bootstrap_loaders: bootstrap_loaders
         })
     }
 
-    extern "system" fn debug_callback(
-        severity: vk::DebugUtilsMessageSeverityFlagsEXT,
-        _type: vk::DebugUtilsMessageTypeFlagsEXT,
-        data: *const vk::DebugUtilsMessengerCallbackDataEXT,
-        _: *mut c_void
-    ) -> vk::Bool32 {
-        let data = unsafe { *data };
-        let message = unsafe { CStr::from_ptr(data.message) }.to_string_lossy();
+    unsafe fn create_instance<'a>(initial_title: &str, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, window: &Window, app_data: &mut AppData) -> Result<Instance> {
+        debug!("Selecting instance extensions and layers, and creating instance.");
+        let loader = LibloadingLoader::new(LIBRARY)?;
+        let entry = Entry::new(loader).map_err(|b| anyhow!("{}", b))?;
 
-        if severity >= vk::DebugUtilsMessageSeverityFlagsEXT::ERROR {
-            error!("[Vulkan DebugUtils: {:?}] {}", _type, message);
-        } else if severity >= vk::DebugUtilsMessageSeverityFlagsEXT::WARNING {
-            warn!("[Vulkan DebugUtils: {:?}] {}", _type, message);
-        } else if severity >= vk::DebugUtilsMessageSeverityFlagsEXT::INFO {
-            debug!("[Vulkan DebugUtils: {:?}] {}", _type, message);
-        } else {
-            trace!("[Vulkan DebugUtils: {:?}] {}", _type, message);
-        }
-
-        vk::FALSE
-    }
-
-    unsafe fn create_instance(initial_title: &str, window: &Window, entry: &Entry, app_data: &mut AppData) -> Result<Instance> {
         let mut zero_terminated: String = "".to_owned();
         zero_terminated.push_str(initial_title);
         zero_terminated.push_str("\0");
@@ -154,9 +102,9 @@ impl App {
             .map(|n| n.as_ptr())
             .collect::<Vec<_>>();
 
-        if VALIDATION_ENABLED {
-            request_layers_ptrs.push(VALIDATION_LAYER.as_ptr());
-            request_extensions_ptrs.push(vk::EXT_DEBUG_UTILS_EXTENSION.name.as_ptr());
+        for loader in bootstrap_loaders.iter() {
+            loader.add_required_instance_layers(&mut request_layers_ptrs)?;
+            loader.add_required_instance_extensions(&mut request_extensions_ptrs)?;
         }
 
         let available_layers = entry
@@ -196,26 +144,33 @@ impl App {
         }
 
         debug!("Creating Vulkan instance with requested layers and extensions.");
-        let mut inst_info = vk::InstanceCreateInfo::builder()
+        let inst_info = vk::InstanceCreateInfo::builder()
             .application_info(&app_info)
             .enabled_layer_names(&request_layers_ptrs)
             .enabled_extension_names(&request_extensions_ptrs);
 
-        let mut debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
-            .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
-            .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
-            .user_callback(Some(Self::debug_callback));
+        let last_callback = move |inst_info: vk::InstanceCreateInfoBuilder| -> Result<Instance> {
+            trace!("Final callback. Creating Vulkan instance");
+            let inst = entry.create_instance(&inst_info, None)?;
+            debug!("Vulkan instance created: {:?}", inst);
+            Ok(inst)
+        };
 
-        if VALIDATION_ENABLED {
-            inst_info = inst_info.push_next(&mut debug_info);
+        fn create_and_invoke_callback(index: usize, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &mut AppData, last_callback: &dyn Fn(vk::InstanceCreateInfoBuilder) -> Result<Instance>, inst_info: vk::InstanceCreateInfoBuilder) -> Result<Instance> {
+            trace!("Invoking callback for index {} to create Vulkan instance", index);
+            let loader_res = bootstrap_loaders.get(index);
+            match loader_res {
+                Some(loader) => {
+                    let next_callback = |inst_info: vk::InstanceCreateInfoBuilder, app_data: &mut AppData| create_and_invoke_callback(index + 1, bootstrap_loaders, app_data, last_callback, inst_info);
+                    loader.instance_create(inst_info, app_data, &next_callback)
+                },
+                None => {
+                    last_callback(inst_info)
+                }
+            }
         }
 
-        let inst = entry.create_instance(&inst_info, None)?;
-
-        if VALIDATION_ENABLED {
-            debug!("Creating Vulkan debug utils messenger. Future validation/error/diagnostics from Vulkan will be logged.");
-            app_data.messenger = Some(inst.create_debug_utils_messenger_ext(&debug_info, None)?);
-        }
+        let inst = create_and_invoke_callback(0, bootstrap_loaders, app_data, &last_callback, inst_info)?;
 
         Ok(inst)
     }
@@ -256,7 +211,7 @@ impl App {
         Ok(())
     }
 
-    unsafe fn create_logical_device(inst: &Instance, app_data: &mut AppData) -> Result<Device> {
+    unsafe fn create_logical_device(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &mut AppData) -> Result<Device> {
         let physical_device = app_data.physical_device.unwrap();
         let indices = QueueFamilyIndices::get(&inst, app_data, physical_device)?;
 
@@ -276,34 +231,61 @@ impl App {
             })
             .collect::<Vec<_>>();
 
-        let mut request_layers = vec![];
-
-        if VALIDATION_ENABLED {
-            request_layers.push(VALIDATION_LAYER);
-        }
-
-        let available_layers = inst
-            .enumerate_device_layer_properties(physical_device)?
-            .iter()
-            .map(|l| l.layer_name)
-            .collect::<HashSet<_>>();
-        debug!("Available Vulkan device layers: {:?}", available_layers);
-        debug!("Requesting Vulkan device layers: {:?}", request_layers);
-
         let mut request_layers_ptrs = vec![];
-        for layer in request_layers {
-            if !available_layers.contains(&layer) {
-                return Err(anyhow!("Vulkan device layer (\"{}\") requested but not supported.", layer));
-            }
-            request_layers_ptrs.push(layer.as_ptr());
+        let mut request_extensions_ptrs = vec![];
+        let mut features = vk::PhysicalDeviceFeatures::builder();
+
+        for loader in bootstrap_loaders.iter() {
+            loader.add_required_device_layers(&mut request_layers_ptrs)?;
+            loader.add_required_device_extensions(&mut request_extensions_ptrs)?;
+            loader.add_required_device_features(&mut features)?;
         }
 
-        let features = vk::PhysicalDeviceFeatures::builder();
+        {
+            let available_layers = inst
+                .enumerate_device_layer_properties(physical_device)?
+                .iter()
+                .map(|l| l.layer_name)
+                .collect::<HashSet<_>>();
+            let request_layers = request_layers_ptrs
+                .iter()
+                .map(|name| CStr::from_ptr(*name))
+                .collect::<Vec<_>>();
+            info!("Available Vulkan device layers: {:?}", available_layers);
+            info!("Requesting Vulkan device layers: {:?}", request_layers);
+
+            for layer in request_layers {
+                if !available_layers.contains(&StringArray::from_cstr(layer)) {
+                    return Err(anyhow!("Vulkan device layer (\"{:?}\") requested but not supported.", layer));
+                }
+            }
+        }
+
+        {
+            let available_extensions = inst
+                .enumerate_device_extension_properties(physical_device, None)?
+                .iter()
+                .map(|l| l.extension_name)
+                .collect::<HashSet<_>>();
+            let request_extensions = request_extensions_ptrs
+                .iter()
+                .map(|name| CStr::from_ptr(*name))
+                .collect::<Vec<_>>();
+            info!("Available Vulkan device extensions: {:?}", available_extensions);
+            info!("Requesting Vulkan device extensions: {:?}", request_extensions);
+
+            for ext in request_extensions {
+                if !available_extensions.contains(&StringArray::from_cstr(ext)) {
+                    return Err(anyhow!("Vulkan device extension (\"{:?}\") requested but not supported.", ext));
+                }
+            }
+        }
 
         debug!("Creating Vulkan logical device with requested layers and features.");
         let device_info = vk::DeviceCreateInfo::builder()
             .queue_create_infos(&queue_infos)
             .enabled_layer_names(&request_layers_ptrs)
+            .enabled_extension_names(&request_extensions_ptrs)
             .enabled_features(&features);
 
         let device = inst.create_device(physical_device, &device_info, None)?;
@@ -319,6 +301,7 @@ impl App {
         Ok(device)
     }
 
+    //Deliberately not a ref, because the run method needs to own "self"
     pub fn run(mut self) -> ! {
         let mut destroying = false;
         debug!("Starting window event loop.");
@@ -357,9 +340,8 @@ impl App {
                 self.inst.destroy_surface_khr(surface, None);
             }
 
-            if let Some(messenger) = self.app_data.messenger.take() {
-                debug!("Destroying Vulkan debug utils messenger. Additional Vulkan messages may not be logged");
-                self.inst.destroy_debug_utils_messenger_ext(messenger, None);
+            for loader in self.bootstrap_loaders.iter().rev() {
+                loader.before_destroy_instance(&self.inst, &mut self.app_data);
             }
 
             debug!("Destroying Vulkan instance.");
