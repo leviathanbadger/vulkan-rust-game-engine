@@ -19,10 +19,16 @@ use crate::bootstrap::{BootstrapLoader, queue_family_indices::QueueFamilyIndices
 #[derive(Debug, Default)]
 pub struct AppData {
     pub messenger: Option<vk::DebugUtilsMessengerEXT>,
-    physical_device: Option<vk::PhysicalDevice>,
-    graphics_queue: Option<vk::Queue>,
-    present_queue: Option<vk::Queue>,
-    pub surface: Option<vk::SurfaceKHR>
+    pub physical_device: Option<vk::PhysicalDevice>,
+    pub graphics_queue: Option<vk::Queue>,
+    pub present_queue: Option<vk::Queue>,
+    pub graphics_queue_family: Option<u32>,
+    pub present_queue_family: Option<u32>,
+    pub surface: Option<vk::SurfaceKHR>,
+    pub swapchain_format: Option<vk::Format>,
+    pub swapchain_extent: Option<vk::Extent2D>,
+    pub swapchain: Option<vk::SwapchainKHR>,
+    pub swapchain_images: Vec<vk::Image>
 }
 
 #[derive(Debug, Error)]
@@ -80,6 +86,10 @@ impl App {
 
             Self::select_graphics_card(&inst, &bootstrap_loaders, &mut app_data, &request_layers_ptrs, &request_extensions_ptrs)?;
             device = Self::create_logical_device(&inst, &bootstrap_loaders, &mut app_data, &request_layers_ptrs, &request_extensions_ptrs)?;
+        }
+
+        for loader in bootstrap_loaders.iter() {
+            loader.after_create_logical_device(&inst, &device, &window, &mut app_data)?;
         }
 
         Ok(Self {
@@ -274,10 +284,12 @@ impl App {
 
         let graphics_queue = device.get_device_queue(graphics_queue_index, 0);
         app_data.graphics_queue = Some(graphics_queue);
+        app_data.graphics_queue_family = Some(graphics_queue_index);
         debug!("Vulkan graphics queue handle: {}", graphics_queue.as_raw());
 
         let present_queue = device.get_device_queue(present_queue_index, 0);
         app_data.present_queue = Some(present_queue);
+        app_data.present_queue_family = Some(present_queue_index);
         debug!("Vulkan KHR present queue handle: {}", present_queue.as_raw());
 
         Ok(device)
@@ -357,6 +369,10 @@ impl App {
 
     pub fn destroy(&mut self) {
         unsafe {
+            for loader in self.bootstrap_loaders.iter().rev() {
+                loader.before_destroy_logical_device(&self.inst, &self.device, &mut self.app_data);
+            }
+
             debug!("Destroying Vulkan logical device.");
             self.device.device_wait_idle().unwrap();
             self.device.destroy_device(None);

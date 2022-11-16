@@ -1,12 +1,12 @@
 use crate::app::{AppData, GraphicsCardSuitabilityError};
 
-use super::BootstrapLoader;
+use super::{BootstrapLoader};
 
 use anyhow::{anyhow, Result};
 use winit::window::{Window};
 use vulkanalia::{
     prelude::v1_0::*,
-    vk::{PhysicalDeviceProperties, PhysicalDeviceFeatures, KhrSurfaceExtension},
+    vk::{PhysicalDeviceProperties, PhysicalDeviceFeatures, KhrSurfaceExtension, KhrSwapchainExtension},
 };
 
 #[derive(Debug)]
@@ -122,5 +122,75 @@ impl BootstrapLoader for BootstrapSwapchainLoader {
         debug!("Swapchain support determined for physical device ({} - {}). Chosen format: {:?}; chosen presentation mode: {:?}", physical_device.as_raw(), properties.device_name, format.unwrap(), present_mode.unwrap());
 
         Ok(())
+    }
+
+    fn after_create_logical_device(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData) -> Result<()> {
+        let physical_device = app_data.physical_device.unwrap();
+        let swapchain_support: SwapchainSupport;
+        unsafe {
+            swapchain_support = SwapchainSupport::get(inst, app_data, physical_device)?;
+        }
+
+        let format = self.choose_surface_format(&swapchain_support).unwrap();
+        let mode = self.choose_presentation_mode(&swapchain_support).unwrap();
+        let extent = self.choose_swapchain_extent(&swapchain_support, window);
+
+        app_data.swapchain_format = Some(format.format);
+        app_data.swapchain_extent = Some(extent);
+
+        let mut image_count = swapchain_support.capabilities.min_image_count + 1;
+        if swapchain_support.capabilities.max_image_count != 0 && image_count > swapchain_support.capabilities.max_image_count {
+            image_count = swapchain_support.capabilities.max_image_count;
+        }
+
+        let graphics_queue_index = app_data.graphics_queue_family.unwrap();
+        let present_queue_index = app_data.present_queue_family.unwrap();
+        let mut queue_family_indices = vec![];
+        let mut image_sharing_mode = vk::SharingMode::EXCLUSIVE;
+        if graphics_queue_index != present_queue_index {
+            queue_family_indices.push(graphics_queue_index);
+            queue_family_indices.push(present_queue_index);
+            image_sharing_mode = vk::SharingMode::CONCURRENT;
+        }
+
+        let surface = app_data.surface.unwrap();
+        let swapchain_info = vk::SwapchainCreateInfoKHR::builder()
+            .surface(surface)
+            .min_image_count(image_count)
+            .image_format(format.format)
+            .image_color_space(format.color_space)
+            .image_extent(extent)
+            .image_array_layers(1)
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_sharing_mode(image_sharing_mode)
+            .queue_family_indices(&queue_family_indices)
+            .pre_transform(swapchain_support.capabilities.current_transform)
+            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+            .present_mode(mode)
+            .clipped(true)
+            .old_swapchain(vk::SwapchainKHR::null());
+
+        let swapchain: vk::SwapchainKHR;
+        unsafe {
+            debug!("Creating swapchain...");
+            swapchain = device.create_swapchain_khr(&swapchain_info, None)?;
+            trace!("Swapchain created: {:?}", swapchain);
+        }
+        app_data.swapchain = Some(swapchain);
+
+        unsafe {
+            app_data.swapchain_images = device.get_swapchain_images_khr(swapchain)?;
+        }
+
+        Ok(())
+    }
+
+    fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
+        if let Some(swapchain) = app_data.swapchain.take() {
+            debug!("Destroying swapchain.");
+            unsafe {
+                device.destroy_swapchain_khr(swapchain, None);
+            }
+        }
     }
 }

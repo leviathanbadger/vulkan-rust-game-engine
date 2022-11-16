@@ -2,6 +2,7 @@ pub mod bootstrap_validation_loader;
 pub mod bootstrap_swapchain_loader;
 pub mod queue_family_indices;
 use anyhow::{Result};
+use winit::window::Window;
 use std::fmt::{Debug};
 use vulkanalia::{
     prelude::v1_0::*,
@@ -36,4 +37,9 @@ pub trait BootstrapLoader : Debug {
     fn check_physical_device_compatibility(&self, _inst: &Instance, _app_data: &AppData, _physical_device: vk::PhysicalDevice, _properties: PhysicalDeviceProperties, _features: PhysicalDeviceFeatures) -> Result<()> {
         Ok(())
     }
+
+    fn after_create_logical_device(&self, _inst: &Instance, _device: &Device, _window: &Window, _app_data: &mut AppData) -> Result<()> {
+        Ok(())
+    }
+    fn before_destroy_logical_device(&self, _inst: &Instance, _device: &Device, _app_data: &mut AppData) -> () { }
 }
