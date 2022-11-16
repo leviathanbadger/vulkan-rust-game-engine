@@ -2,7 +2,11 @@ use winit::dpi::{LogicalSize};
 use anyhow::{Result};
 use crate::{
     app::App,
-    bootstrap::BootstrapLoader
+    bootstrap::{
+        BootstrapLoader,
+        bootstrap_validation_loader::BootstrapValidationLoader,
+        bootstrap_swapchain_loader::BootstrapSwapchainLoader
+    }
 };
 
 pub trait HasHeapBuilder {
@@ -20,24 +24,36 @@ impl HasHeapBuilder for App {
 
 #[derive(Debug)]
 pub struct AppBuilder {
-    boostrap_loaders: Vec<Box<dyn BootstrapLoader>>,
+    bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>,
     initial_title: &'static str,
-    default_size: LogicalSize<i32>
+    default_size: LogicalSize<i32>,
+    add_validation: bool
 }
 
 impl<'a> Default for AppBuilder {
     fn default() -> Self {
         Self {
-            boostrap_loaders: vec![],
+            bootstrap_loaders: vec![],
             initial_title: "",
-            default_size: LogicalSize::new(300, 300)
+            default_size: LogicalSize::new(300, 300),
+            add_validation: false
         }
     }
 }
 
 impl AppBuilder {
     pub fn add_bootstrap_loader(mut self, loader: Box<dyn BootstrapLoader>) -> Self {
-        self.boostrap_loaders.push(loader);
+        self.bootstrap_loaders.push(loader);
+
+        self
+    }
+
+    pub fn add_default_bootstrap_loaders(self) -> Self {
+        self.add_bootstrap_loader(Box::new(BootstrapSwapchainLoader::new()))
+    }
+
+    pub fn add_validation(mut self) -> Self {
+        self.add_validation = true;
 
         self
     }
@@ -55,6 +71,11 @@ impl AppBuilder {
     }
 
     pub fn build(self) -> Result<App> {
-        App::create(self.initial_title, self.default_size, self.boostrap_loaders)
+        let mut bootstrap_loaders = self.bootstrap_loaders;
+        if self.add_validation {
+            let validation_loader = Box::new(BootstrapValidationLoader::new());
+            bootstrap_loaders.insert(0, validation_loader);
+        }
+        App::create(self.initial_title, self.default_size, bootstrap_loaders)
     }
 }

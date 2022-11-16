@@ -3,7 +3,6 @@ mod app;
 mod builder;
 
 use anyhow::{Result};
-use bootstrap::bootstrap_validation_loader::BootstrapValidationLoader;
 use winit::dpi::{LogicalSize};
 
 use builder::{HasHeapBuilder};
@@ -18,11 +17,11 @@ fn main() -> Result<()> {
 
     let mut builder = App::builder()
         .initial_title("Vulkan-rust Test App")
-        .default_size(LogicalSize::new(1920, 1080));
+        .default_size(LogicalSize::new(1920, 1080))
+        .add_default_bootstrap_loaders();
 
     if VALIDATION_ENABLED {
-        let validation_loader = Box::new(BootstrapValidationLoader::new());
-        builder = builder.add_bootstrap_loader(validation_loader);
+        builder = builder.add_validation();
     }
 
     let app = builder.build()?;

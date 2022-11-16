@@ -70,8 +70,16 @@ impl App {
         let device: Device;
         unsafe {
             debug!("Selecting graphics card (physical device) and creating logical device.");
-            Self::select_graphics_card(&inst, &mut app_data)?;
-            device = Self::create_logical_device(&inst, &bootstrap_loaders, &mut app_data)?;
+
+            let mut request_layers_ptrs = vec![];
+            let mut request_extensions_ptrs = vec![];
+            for loader in bootstrap_loaders.iter() {
+                loader.add_required_device_layers(&mut request_layers_ptrs)?;
+                loader.add_required_device_extensions(&mut request_extensions_ptrs)?;
+            }
+
+            Self::select_graphics_card(&inst, &bootstrap_loaders, &mut app_data, &request_layers_ptrs, &request_extensions_ptrs)?;
+            device = Self::create_logical_device(&inst, &bootstrap_loaders, &mut app_data, &request_layers_ptrs, &request_extensions_ptrs)?;
         }
 
         Ok(Self {
@@ -111,41 +119,7 @@ impl App {
             loader.add_required_instance_extensions(&mut request_extensions_ptrs)?;
         }
 
-        let available_layers = entry
-            .enumerate_instance_layer_properties()?
-            .iter()
-            .map(|l| l.layer_name)
-            .collect::<HashSet<_>>();
-        let request_layers = request_layers_ptrs
-            .iter()
-            .map(|name| CStr::from_ptr(*name))
-            .collect::<Vec<_>>();
-        info!("Available Vulkan layers: {:?}", available_layers);
-        info!("Requesting Vulkan layers: {:?}", request_layers);
-
-        for layer in request_layers {
-            if !available_layers.contains(&StringArray::from_cstr(layer)) {
-                return Err(anyhow!("Vulkan layer (\"{:?}\") requested but not supported.", layer));
-            }
-        }
-
-        let available_extensions = entry
-            .enumerate_instance_extension_properties(None)?
-            .iter()
-            .map(|e| e.extension_name)
-            .collect::<HashSet<_>>();
-        let request_extensions = request_extensions_ptrs
-            .iter()
-            .map(|name| CStr::from_ptr(*name))
-            .collect::<Vec<_>>();
-        info!("Available Vulkan extensions: {:?}", available_extensions);
-        info!("Requesting Vulkan extensions: {:?}", request_extensions);
-
-        for ext in request_extensions {
-            if !available_extensions.contains(&StringArray::from_cstr(ext)) {
-                return Err(anyhow!("Vulkan extension (\"{:?}\") requested but not supported.", ext));
-            }
-        }
+        Self::check_instance(entry, &request_layers_ptrs, &request_extensions_ptrs)?;
 
         debug!("Creating Vulkan instance with requested layers and extensions.");
         let inst_info = vk::InstanceCreateInfo::builder()
@@ -179,13 +153,53 @@ impl App {
         Ok(inst)
     }
 
-    unsafe fn select_graphics_card(inst: &Instance, app_data: &mut AppData) -> Result<()> {
+    unsafe fn check_instance(entry: &Entry, request_layers_ptrs: &Vec<*const i8>, request_extensions_ptrs: &Vec<*const i8>) -> Result<()> {
+        let available_layers = entry
+            .enumerate_instance_layer_properties()?
+            .iter()
+            .map(|l| l.layer_name)
+            .collect::<HashSet<_>>();
+        let request_layers = request_layers_ptrs
+            .iter()
+            .map(|name| CStr::from_ptr(*name))
+            .collect::<Vec<_>>();
+        debug!("Available Vulkan layers: {:?}", available_layers);
+        info!("Requesting Vulkan layers: {:?}", request_layers);
+
+        for layer in request_layers {
+            if !available_layers.contains(&StringArray::from_cstr(layer)) {
+                return Err(anyhow!("Vulkan layer ({:?}) requested but not supported.", layer));
+            }
+        }
+
+        let available_extensions = entry
+            .enumerate_instance_extension_properties(None)?
+            .iter()
+            .map(|e| e.extension_name)
+            .collect::<HashSet<_>>();
+        let request_extensions = request_extensions_ptrs
+            .iter()
+            .map(|name| CStr::from_ptr(*name))
+            .collect::<Vec<_>>();
+        debug!("Available Vulkan extensions: {:?}", available_extensions);
+        info!("Requesting Vulkan extensions: {:?}", request_extensions);
+
+        for ext in request_extensions {
+            if !available_extensions.contains(&StringArray::from_cstr(ext)) {
+                return Err(anyhow!("Vulkan extension ({:?}) requested but not supported.", ext));
+            }
+        }
+
+        Ok(())
+    }
+
+    unsafe fn select_graphics_card(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &mut AppData, request_layers_ptrs: &Vec<*const i8>, request_extensions_ptrs: &Vec<*const i8>) -> Result<()> {
         let physical_devices = inst.enumerate_physical_devices()?;
 
         for physical_device in physical_devices {
             let properties = inst.get_physical_device_properties(physical_device);
 
-            if let Err(error) = Self::check_graphics_card(inst, app_data, physical_device) {
+            if let Err(error) = Self::check_graphics_card(inst, bootstrap_loaders, app_data, physical_device, request_layers_ptrs, request_extensions_ptrs) {
                 warn!("Skipping graphics card ({} - {}): {}", physical_device.as_raw(), properties.device_name, error);
             } else {
                 //TODO: select _best_ graphics card, not just the first one in the list
@@ -198,11 +212,16 @@ impl App {
         Err(anyhow!(GraphicsCardSuitabilityError("No suitable graphics card was found")))
     }
 
-    unsafe fn check_graphics_card(inst: &Instance, app_data: &AppData, physical_device: vk::PhysicalDevice) -> Result<()> {
-        let _properties = inst.get_physical_device_properties(physical_device);
-        let _features = inst.get_physical_device_features(physical_device);
+    unsafe fn check_graphics_card(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &AppData, physical_device: vk::PhysicalDevice, request_layers_ptrs: &Vec<*const i8>, request_extensions_ptrs: &Vec<*const i8>) -> Result<()> {
+        let properties = inst.get_physical_device_properties(physical_device);
+        let features = inst.get_physical_device_features(physical_device);
 
-        //TODO: determine what base properties and features are required to run this engine. Heh
+        //Check for layers and extensions before calling check_physical_device_compatibility. Some bootstrap loaders assume their requests extension are already confirmed to be present
+        Self::check_physical_device(inst, physical_device, request_layers_ptrs, request_extensions_ptrs, false)?;
+
+        for loader in bootstrap_loaders.iter() {
+            loader.check_physical_device_compatibility(inst, app_data, physical_device, properties, features)?;
+        }
 
         let queue_family_indices = QueueFamilyIndices::get(inst, app_data, physical_device)?;
         if let None = queue_family_indices.graphics {
@@ -215,7 +234,7 @@ impl App {
         Ok(())
     }
 
-    unsafe fn create_logical_device(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &mut AppData) -> Result<Device> {
+    unsafe fn create_logical_device(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &mut AppData, request_layers_ptrs: &Vec<*const i8>, request_extensions_ptrs: &Vec<*const i8>) -> Result<Device> {
         let physical_device = app_data.physical_device.unwrap();
         let indices = QueueFamilyIndices::get(&inst, app_data, physical_device)?;
 
@@ -235,55 +254,14 @@ impl App {
             })
             .collect::<Vec<_>>();
 
-        let mut request_layers_ptrs = vec![];
-        let mut request_extensions_ptrs = vec![];
         let mut features = vk::PhysicalDeviceFeatures::builder();
 
         for loader in bootstrap_loaders.iter() {
-            loader.add_required_device_layers(&mut request_layers_ptrs)?;
-            loader.add_required_device_extensions(&mut request_extensions_ptrs)?;
             loader.add_required_device_features(&mut features)?;
         }
 
-        {
-            let available_layers = inst
-                .enumerate_device_layer_properties(physical_device)?
-                .iter()
-                .map(|l| l.layer_name)
-                .collect::<HashSet<_>>();
-            let request_layers = request_layers_ptrs
-                .iter()
-                .map(|name| CStr::from_ptr(*name))
-                .collect::<Vec<_>>();
-            info!("Available Vulkan device layers: {:?}", available_layers);
-            info!("Requesting Vulkan device layers: {:?}", request_layers);
-
-            for layer in request_layers {
-                if !available_layers.contains(&StringArray::from_cstr(layer)) {
-                    return Err(anyhow!("Vulkan device layer (\"{:?}\") requested but not supported.", layer));
-                }
-            }
-        }
-
-        {
-            let available_extensions = inst
-                .enumerate_device_extension_properties(physical_device, None)?
-                .iter()
-                .map(|l| l.extension_name)
-                .collect::<HashSet<_>>();
-            let request_extensions = request_extensions_ptrs
-                .iter()
-                .map(|name| CStr::from_ptr(*name))
-                .collect::<Vec<_>>();
-            info!("Available Vulkan device extensions: {:?}", available_extensions);
-            info!("Requesting Vulkan device extensions: {:?}", request_extensions);
-
-            for ext in request_extensions {
-                if !available_extensions.contains(&StringArray::from_cstr(ext)) {
-                    return Err(anyhow!("Vulkan device extension (\"{:?}\") requested but not supported.", ext));
-                }
-            }
-        }
+        // Sanity check. At this point the physical device should have been selected based (in part) on having the requested layers and extensions
+        Self::check_physical_device(inst, physical_device, request_layers_ptrs, request_extensions_ptrs, true)?;
 
         debug!("Creating Vulkan logical device with requested layers and features.");
         let device_info = vk::DeviceCreateInfo::builder()
@@ -305,10 +283,54 @@ impl App {
         Ok(device)
     }
 
+    unsafe fn check_physical_device(inst: &Instance, physical_device: vk::PhysicalDevice, request_layers_ptrs: &Vec<*const i8>, request_extensions_ptrs: &Vec<*const i8>, log_check: bool) -> Result<()> {
+        let available_layers = inst
+            .enumerate_device_layer_properties(physical_device)?
+            .iter()
+            .map(|l| l.layer_name)
+            .collect::<HashSet<_>>();
+        let request_layers = request_layers_ptrs
+            .iter()
+            .map(|name| CStr::from_ptr(*name))
+            .collect::<Vec<_>>();
+        if log_check {
+            debug!("Available Vulkan device layers: {:?}", available_layers);
+            info!("Requesting Vulkan device layers: {:?}", request_layers);
+        }
+
+        for layer in request_layers {
+            if !available_layers.contains(&StringArray::from_cstr(layer)) {
+                return Err(anyhow!("Vulkan device layer ({:?}) requested but not supported.", layer));
+            }
+        }
+
+        let available_extensions = inst
+            .enumerate_device_extension_properties(physical_device, None)?
+            .iter()
+            .map(|l| l.extension_name)
+            .collect::<HashSet<_>>();
+        let request_extensions = request_extensions_ptrs
+            .iter()
+            .map(|name| CStr::from_ptr(*name))
+            .collect::<Vec<_>>();
+        if log_check {
+            debug!("Available Vulkan device extensions: {:?}", available_extensions);
+            info!("Requesting Vulkan device extensions: {:?}", request_extensions);
+        }
+
+        for ext in request_extensions {
+            if !available_extensions.contains(&StringArray::from_cstr(ext)) {
+                return Err(anyhow!("Vulkan device extension ({:?}) requested but not supported.", ext));
+            }
+        }
+
+        Ok(())
+    }
+
     //Deliberately not a ref, because the run method needs to own "self"
     pub fn run(mut self) -> ! {
         let mut destroying = false;
-        debug!("Starting window event loop.");
+        info!("Starting window event loop.");
         //TODO: Don't abuse Option<> in the struct in order to call run on the event loop without causing an ownership error
         //TODO: Add Ctrl+C handler to gracefully shut down app
         let event_loop = self.event_loop.take().unwrap();

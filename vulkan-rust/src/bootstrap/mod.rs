@@ -1,10 +1,11 @@
 pub mod bootstrap_validation_loader;
+pub mod bootstrap_swapchain_loader;
 pub mod queue_family_indices;
 use anyhow::{Result};
 use std::fmt::{Debug};
 use vulkanalia::{
     prelude::v1_0::*,
-    vk::{InstanceCreateInfoBuilder, PhysicalDeviceFeaturesBuilder}
+    vk::{InstanceCreateInfoBuilder, PhysicalDeviceFeaturesBuilder, PhysicalDeviceProperties, PhysicalDeviceFeatures}
 };
 
 use crate::app::AppData;
@@ -29,6 +30,10 @@ pub trait BootstrapLoader : Debug {
         Ok(())
     }
     fn add_required_device_features(&self, _features: &mut PhysicalDeviceFeaturesBuilder) -> Result<()> {
+        Ok(())
+    }
+
+    fn check_physical_device_compatibility(&self, _inst: &Instance, _app_data: &AppData, _physical_device: vk::PhysicalDevice, _properties: PhysicalDeviceProperties, _features: PhysicalDeviceFeatures) -> Result<()> {
         Ok(())
     }
 }
