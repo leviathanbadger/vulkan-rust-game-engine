@@ -1,3 +1,4 @@
+pub mod bootstrap_pipeline_loader;
 pub mod bootstrap_validation_loader;
 pub mod bootstrap_swapchain_loader;
 pub mod queue_family_indices;

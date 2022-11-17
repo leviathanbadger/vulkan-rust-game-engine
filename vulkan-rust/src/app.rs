@@ -29,7 +29,10 @@ pub struct AppData {
     pub swapchain_extent: Option<vk::Extent2D>,
     pub swapchain: Option<vk::SwapchainKHR>,
     pub swapchain_images: Vec<vk::Image>,
-    pub swapchain_image_views: Vec<vk::ImageView>
+    pub swapchain_image_views: Vec<vk::ImageView>,
+    pub render_pass: Option<vk::RenderPass>,
+    pub pipeline_layout: Option<vk::PipelineLayout>,
+    pub pipeline: Option<vk::Pipeline>
 }
 
 #[derive(Debug, Error)]
