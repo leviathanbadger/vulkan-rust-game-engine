@@ -32,7 +32,8 @@ pub struct AppData {
     pub swapchain_image_views: Vec<vk::ImageView>,
     pub render_pass: Option<vk::RenderPass>,
     pub pipeline_layout: Option<vk::PipelineLayout>,
-    pub pipeline: Option<vk::Pipeline>
+    pub pipeline: Option<vk::Pipeline>,
+    pub framebuffers: Vec<vk::Framebuffer>
 }
 
 #[derive(Debug, Error)]
@@ -54,7 +55,7 @@ pub struct App {
 
 impl App {
     pub fn create(initial_title: &'static str, default_size: LogicalSize<i32>, bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>) -> Result<Self> {
-        debug!("Creating window and window event loop.");
+        debug!("Creating window and window event loop...");
         let event_loop = EventLoop::new();
         //TODO: add support for fullscreen
         let window = WindowBuilder::new()
@@ -73,13 +74,13 @@ impl App {
         }
 
         unsafe {
-            debug!("Creating Vulkan surface KHR.");
+            debug!("Creating Vulkan surface KHR...");
             app_data.surface = Some(vk_window::create_surface(&inst, &window)?);
         }
 
         let device: Device;
         unsafe {
-            debug!("Selecting graphics card (physical device) and creating logical device.");
+            debug!("Selecting graphics card (physical device) and creating logical device...");
 
             let mut request_layers_ptrs = vec![];
             let mut request_extensions_ptrs = vec![];
@@ -108,7 +109,7 @@ impl App {
     }
 
     unsafe fn create_instance<'a>(initial_title: &str, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, window: &Window, app_data: &mut AppData, entry: &Entry) -> Result<Instance> {
-        debug!("Selecting instance extensions and layers, and creating instance.");
+        debug!("Selecting instance extensions and layers, and creating instance...");
         let mut zero_terminated: String = "".to_owned();
         zero_terminated.push_str(initial_title);
         zero_terminated.push_str("\0");
@@ -135,21 +136,21 @@ impl App {
 
         Self::check_instance(entry, &request_layers_ptrs, &request_extensions_ptrs)?;
 
-        debug!("Creating Vulkan instance with requested layers and extensions.");
+        debug!("Creating Vulkan instance with requested layers and extensions...");
         let inst_info = vk::InstanceCreateInfo::builder()
             .application_info(&app_info)
             .enabled_layer_names(&request_layers_ptrs)
             .enabled_extension_names(&request_extensions_ptrs);
 
         let last_callback = move |inst_info: vk::InstanceCreateInfoBuilder| -> Result<Instance> {
-            trace!("Final callback. Creating Vulkan instance");
+            trace!("Final callback. Creating Vulkan instance...");
             let inst = entry.create_instance(&inst_info, None)?;
             debug!("Vulkan instance created: {:?}", inst);
             Ok(inst)
         };
 
         fn create_and_invoke_callback(index: usize, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &mut AppData, last_callback: &dyn Fn(vk::InstanceCreateInfoBuilder) -> Result<Instance>, inst_info: vk::InstanceCreateInfoBuilder) -> Result<Instance> {
-            trace!("Invoking callback for index {} to create Vulkan instance", index);
+            trace!("Invoking callback for index {} to create Vulkan instance...", index);
             let loader_res = bootstrap_loaders.get(index);
             match loader_res {
                 Some(loader) => {
@@ -377,12 +378,12 @@ impl App {
                 loader.before_destroy_logical_device(&self.inst, &self.device, &mut self.app_data);
             }
 
-            debug!("Destroying Vulkan logical device.");
+            debug!("Destroying Vulkan logical device...");
             self.device.device_wait_idle().unwrap();
             self.device.destroy_device(None);
 
             if let Some(surface) = self.app_data.surface.take() {
-                debug!("Destroying Vulkan surface KHR");
+                debug!("Destroying Vulkan surface KHR...");
                 self.inst.destroy_surface_khr(surface, None);
             }
 
@@ -390,7 +391,7 @@ impl App {
                 loader.before_destroy_instance(&self.inst, &mut self.app_data);
             }
 
-            debug!("Destroying Vulkan instance.");
+            debug!("Destroying Vulkan instance...");
             self.inst.destroy_instance(None);
         }
     }

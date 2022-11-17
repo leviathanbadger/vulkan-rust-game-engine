@@ -1,3 +1,4 @@
+pub mod bootstrap_framebuffer_loader;
 pub mod bootstrap_pipeline_loader;
 pub mod bootstrap_validation_loader;
 pub mod bootstrap_swapchain_loader;
