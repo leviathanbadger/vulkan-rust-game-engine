@@ -1,4 +1,8 @@
-use std::{collections::{HashSet}, ffi::CStr};
+use std::{
+    collections::{HashSet},
+    ffi::{CStr},
+    time::{Instant}
+};
 use anyhow::{anyhow, Result};
 use thiserror::Error;
 use winit::{
@@ -57,7 +61,8 @@ pub struct App {
     pub inst: Instance,
     pub device: Device,
     pub bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>,
-    frame: u32
+    frame: u32,
+    start_time: Instant
 }
 
 impl App {
@@ -112,7 +117,8 @@ impl App {
             inst,
             device,
             bootstrap_loaders: bootstrap_loaders,
-            frame: 0
+            frame: 0,
+            start_time: Instant::now()
         })
     }
 
@@ -369,6 +375,9 @@ impl App {
                 }
                 Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                     info!("Window close requested. Shutting down application...");
+                    let duration = self.start_time.elapsed();
+                    let avg_fps = (self.frame as f32) / duration.as_secs_f32();
+                    info!("Rendered {} frames total over {:?}. Average FPS: {}", self.frame, duration, avg_fps);
                     destroying = true;
                     *control_flow = ControlFlow::Exit;
                     self.destroy();
