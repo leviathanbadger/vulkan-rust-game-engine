@@ -4,10 +4,12 @@ use crate::{
     app::App,
     bootstrap::{
         BootstrapLoader,
+        bootstrap_command_buffer_loader::BootstrapCommandBufferLoader,
         bootstrap_framebuffer_loader::BootstrapFramebufferLoader,
         bootstrap_pipeline_loader::BootstrapPipelineLoader,
-        bootstrap_validation_loader::BootstrapValidationLoader,
-        bootstrap_swapchain_loader::BootstrapSwapchainLoader
+        bootstrap_swapchain_loader::BootstrapSwapchainLoader,
+        bootstrap_sync_objects_loader::BootstrapSyncObjectsLoader,
+        bootstrap_validation_loader::BootstrapValidationLoader
     }
 };
 
@@ -54,6 +56,8 @@ impl AppBuilder {
         self.add_bootstrap_loader(Box::new(BootstrapSwapchainLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapPipelineLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapFramebufferLoader::new()))
+            .add_bootstrap_loader(Box::new(BootstrapCommandBufferLoader::new()))
+            .add_bootstrap_loader(Box::new(BootstrapSyncObjectsLoader::new()))
     }
 
     pub fn add_validation(mut self) -> Self {

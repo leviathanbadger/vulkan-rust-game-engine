@@ -11,10 +11,12 @@ use vulkanalia::{
     loader::{LibloadingLoader, LIBRARY},
     window as vk_window,
     prelude::v1_0::*,
-    vk::{KhrSurfaceExtension, StringArray}
+    vk::{KhrSurfaceExtension, StringArray, KhrSwapchainExtension}
 };
 
-use crate::bootstrap::{BootstrapLoader, queue_family_indices::QueueFamilyIndices};
+use crate::{
+    bootstrap::{BootstrapLoader, queue_family_indices::QueueFamilyIndices}
+};
 
 #[derive(Debug, Default)]
 pub struct AppData {
@@ -33,7 +35,11 @@ pub struct AppData {
     pub render_pass: Option<vk::RenderPass>,
     pub pipeline_layout: Option<vk::PipelineLayout>,
     pub pipeline: Option<vk::Pipeline>,
-    pub framebuffers: Vec<vk::Framebuffer>
+    pub framebuffers: Vec<vk::Framebuffer>,
+    pub command_pool: Option<vk::CommandPool>,
+    pub command_buffers: Vec<vk::CommandBuffer>,
+    pub image_available_semaphore: Option<vk::Semaphore>,
+    pub render_finished_semaphore: Option<vk::Semaphore>
 }
 
 #[derive(Debug, Error)]
@@ -50,7 +56,8 @@ pub struct App {
     entry: Entry,
     pub inst: Instance,
     pub device: Device,
-    pub bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>
+    pub bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>,
+    frame: u32
 }
 
 impl App {
@@ -104,7 +111,8 @@ impl App {
             entry,
             inst,
             device,
-            bootstrap_loaders: bootstrap_loaders
+            bootstrap_loaders: bootstrap_loaders,
+            frame: 0
         })
     }
 
@@ -356,6 +364,8 @@ impl App {
             match event {
                 Event::MainEventsCleared if !destroying => {
                     self.render().unwrap();
+                    // time!(self.render().unwrap(), "Rendering frame {}", self.frame);
+                    self.frame += 1;
                 }
                 Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                     info!("Window close requested. Shutting down application...");
@@ -369,11 +379,52 @@ impl App {
     }
 
     pub fn render(&mut self) -> Result<()> {
+        let swapchain = self.app_data.swapchain.unwrap();
+        let image_available = self.app_data.image_available_semaphore.unwrap();
+        let render_finished = self.app_data.render_finished_semaphore.unwrap();
+
+        let image_index: usize;
+        unsafe {
+            image_index = self.device.acquire_next_image_khr(swapchain, u64::MAX, image_available, vk::Fence::null())?.0 as usize;
+        }
+
+        let wait_semaphores = &[image_available];
+        let signal_semaphores = &[render_finished];
+        let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let command_buffer = self.app_data.command_buffers[image_index];
+        let command_buffers = &[command_buffer];
+
+        let submit_info = vk::SubmitInfo::builder()
+            .wait_semaphores(wait_semaphores)
+            .wait_dst_stage_mask(wait_stages)
+            .command_buffers(command_buffers)
+            .signal_semaphores(signal_semaphores);
+
+        let graphics_queue = self.app_data.graphics_queue.unwrap();
+        unsafe {
+            self.device.queue_submit(graphics_queue, &[submit_info], vk::Fence::null())?;
+        }
+
+        let swapchains = &[swapchain];
+        let image_indices = &[image_index as u32];
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(signal_semaphores)
+            .swapchains(swapchains)
+            .image_indices(image_indices);
+
+        let present_queue = self.app_data.present_queue.unwrap();
+        unsafe {
+            self.device.queue_present_khr(present_queue, &present_info)?;
+            self.device.queue_wait_idle(present_queue)?;
+        }
+
         Ok(())
     }
 
     pub fn destroy(&mut self) {
         unsafe {
+            self.device.device_wait_idle().unwrap();
+
             for loader in self.bootstrap_loaders.iter().rev() {
                 loader.before_destroy_logical_device(&self.inst, &self.device, &mut self.app_data);
             }
