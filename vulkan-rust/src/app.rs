@@ -19,32 +19,9 @@ use vulkanalia::{
 };
 
 use crate::{
+    app_data::{AppData},
     bootstrap::{BootstrapLoader, queue_family_indices::QueueFamilyIndices}
 };
-
-#[derive(Debug, Default)]
-pub struct AppData {
-    pub messenger: Option<vk::DebugUtilsMessengerEXT>,
-    pub physical_device: Option<vk::PhysicalDevice>,
-    pub graphics_queue: Option<vk::Queue>,
-    pub present_queue: Option<vk::Queue>,
-    pub graphics_queue_family: Option<u32>,
-    pub present_queue_family: Option<u32>,
-    pub surface: Option<vk::SurfaceKHR>,
-    pub swapchain_format: Option<vk::Format>,
-    pub swapchain_extent: Option<vk::Extent2D>,
-    pub swapchain: Option<vk::SwapchainKHR>,
-    pub swapchain_images: Vec<vk::Image>,
-    pub swapchain_image_views: Vec<vk::ImageView>,
-    pub render_pass: Option<vk::RenderPass>,
-    pub pipeline_layout: Option<vk::PipelineLayout>,
-    pub pipeline: Option<vk::Pipeline>,
-    pub framebuffers: Vec<vk::Framebuffer>,
-    pub command_pool: Option<vk::CommandPool>,
-    pub command_buffers: Vec<vk::CommandBuffer>,
-    pub image_available_semaphore: Option<vk::Semaphore>,
-    pub render_finished_semaphore: Option<vk::Semaphore>
-}
 
 #[derive(Debug, Error)]
 #[error("Missing {0}")]
@@ -389,13 +366,25 @@ impl App {
 
     pub fn render(&mut self) -> Result<()> {
         let swapchain = self.app_data.swapchain.unwrap();
-        let image_available = self.app_data.image_available_semaphore.unwrap();
-        let render_finished = self.app_data.render_finished_semaphore.unwrap();
+
+        let sync_frame = (self.frame % self.app_data.max_frames_in_flight()) as usize;
+        let image_available = self.app_data.image_available_semaphores[sync_frame];
+        let render_finished = self.app_data.render_finished_semaphores[sync_frame];
+        let in_flight_fence = self.app_data.in_flight_fences[sync_frame];
 
         let image_index: usize;
         unsafe {
+            self.device.wait_for_fences(&[in_flight_fence], true, u64::MAX)?;
+
             image_index = self.device.acquire_next_image_khr(swapchain, u64::MAX, image_available, vk::Fence::null())?.0 as usize;
+
+            let image_in_flight = self.app_data.images_in_flight[image_index];
+            if !image_in_flight.is_null() {
+                self.device.wait_for_fences(&[image_in_flight], true, u64::MAX)?;
+            }
         }
+
+        self.app_data.images_in_flight[image_index] = in_flight_fence;
 
         let wait_semaphores = &[image_available];
         let signal_semaphores = &[render_finished];
@@ -411,7 +400,8 @@ impl App {
 
         let graphics_queue = self.app_data.graphics_queue.unwrap();
         unsafe {
-            self.device.queue_submit(graphics_queue, &[submit_info], vk::Fence::null())?;
+            self.device.reset_fences(&[in_flight_fence])?;
+            self.device.queue_submit(graphics_queue, &[submit_info], in_flight_fence)?;
         }
 
         let swapchains = &[swapchain];
@@ -424,7 +414,6 @@ impl App {
         let present_queue = self.app_data.present_queue.unwrap();
         unsafe {
             self.device.queue_present_khr(present_queue, &present_info)?;
-            self.device.queue_wait_idle(present_queue)?;
         }
 
         Ok(())

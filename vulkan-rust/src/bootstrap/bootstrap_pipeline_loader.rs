@@ -1,11 +1,13 @@
-use crate::app::{AppData};
-
 use super::{BootstrapLoader};
 
 use anyhow::{anyhow, Result};
 use winit::window::{Window};
 use vulkanalia::{
     prelude::v1_0::*
+};
+
+use crate::{
+    app_data::{AppData}
 };
 
 #[derive(Debug, Default)]

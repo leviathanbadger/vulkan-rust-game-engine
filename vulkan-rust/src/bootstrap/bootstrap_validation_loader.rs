@@ -1,4 +1,3 @@
-use crate::app::AppData;
 use super::BootstrapLoader;
 
 use std::{os::raw::c_void, ffi::CStr};
@@ -6,6 +5,10 @@ use anyhow::{Result};
 use vulkanalia::{
     prelude::v1_0::*,
     vk::{InstanceCreateInfoBuilder, ExtDebugUtilsExtension}
+};
+
+use crate::{
+    app_data::{AppData}
 };
 
 const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");

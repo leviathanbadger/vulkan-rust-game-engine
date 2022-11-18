@@ -1,5 +1,3 @@
-use crate::app::{AppData, GraphicsCardSuitabilityError};
-
 use super::{BootstrapLoader};
 
 use anyhow::{anyhow, Result};
@@ -7,6 +5,11 @@ use winit::window::{Window};
 use vulkanalia::{
     prelude::v1_0::*,
     vk::{PhysicalDeviceProperties, PhysicalDeviceFeatures, KhrSurfaceExtension, KhrSwapchainExtension},
+};
+
+use crate::{
+    app::{GraphicsCardSuitabilityError},
+    app_data::{AppData}
 };
 
 #[derive(Debug)]

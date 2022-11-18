@@ -1,11 +1,13 @@
-use crate::app::{AppData};
-
 use super::{BootstrapLoader};
 
 use anyhow::{Result};
 use winit::window::{Window};
 use vulkanalia::{
     prelude::v1_0::*
+};
+
+use crate::{
+    app_data::{AppData}
 };
 
 #[derive(Debug, Default)]
@@ -18,17 +20,33 @@ impl BootstrapSyncObjectsLoader {
 
     fn create_sync_objects(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
         let semaphore_info = vk::SemaphoreCreateInfo::builder();
+        let fence_info = vk::FenceCreateInfo::builder()
+            .flags(vk::FenceCreateFlags::SIGNALED);
 
-        let image_available: vk::Semaphore;
-        let render_finished: vk::Semaphore;
-        unsafe {
-            debug!("Creating synchronization semaphores...");
-            image_available = device.create_semaphore(&semaphore_info, None)?;
-            render_finished = device.create_semaphore(&semaphore_info, None)?;
-            debug!("Synchronization semaphores created: {:?}, {:?}", image_available, render_finished);
-        }
-        app_data.image_available_semaphore = Some(image_available);
-        app_data.render_finished_semaphore = Some(render_finished);
+        debug!("Creating synchronization objects...");
+
+        let image_available = (0..app_data.max_frames_in_flight())
+            .map(|_| unsafe { device.create_semaphore(&semaphore_info, None) })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let render_finished = (0..app_data.max_frames_in_flight())
+            .map(|_| unsafe { device.create_semaphore(&semaphore_info, None) })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let in_flight_fences = (0..app_data.max_frames_in_flight())
+            .map(|_| unsafe { device.create_fence(&fence_info, None) })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        debug!("Synchronization objects created: {:?}, {:?}, {:?}", image_available, render_finished, in_flight_fences);
+
+        app_data.image_available_semaphores = image_available;
+        app_data.render_finished_semaphores = render_finished;
+        app_data.in_flight_fences = in_flight_fences;
+
+        app_data.images_in_flight = app_data.swapchain_images
+            .iter()
+            .map(|_| vk::Fence::null())
+            .collect::<Vec<_>>();
 
         Ok(())
     }
@@ -36,17 +54,26 @@ impl BootstrapSyncObjectsLoader {
     fn destroy_sync_objects(&self, device: &Device, app_data: &mut AppData) -> () {
         debug!("Destroying synchronization semaphores...");
 
-        if let Some(image_available) = app_data.image_available_semaphore.take() {
+        for semaphore in app_data.image_available_semaphores.iter() {
             unsafe {
-                device.destroy_semaphore(image_available, None);
+                device.destroy_semaphore(*semaphore, None);
             }
         }
+        app_data.image_available_semaphores.clear();
 
-        if let Some(render_finished) = app_data.render_finished_semaphore.take() {
+        for semaphore in app_data.render_finished_semaphores.iter() {
             unsafe {
-                device.destroy_semaphore(render_finished, None);
+                device.destroy_semaphore(*semaphore, None);
             }
         }
+        app_data.render_finished_semaphores.clear();
+
+        for fence in app_data.in_flight_fences.iter() {
+            unsafe {
+                device.destroy_fence(*fence, None);
+            }
+        }
+        app_data.in_flight_fences.clear();
     }
 }
 

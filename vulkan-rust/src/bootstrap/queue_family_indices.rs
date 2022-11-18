@@ -4,7 +4,9 @@ use vulkanalia::{
     vk::{KhrSurfaceExtension}
 };
 
-use crate::app::{AppData};
+use crate::{
+    app_data::{AppData}
+};
 
 #[derive(Copy, Clone, Debug)]
 pub struct QueueFamilyIndices {

@@ -1,6 +1,7 @@
 mod bootstrap;
 mod util;
 mod app;
+mod app_data;
 mod builder;
 
 use anyhow::{Result};

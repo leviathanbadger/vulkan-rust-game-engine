@@ -13,7 +13,9 @@ use vulkanalia::{
     vk::{InstanceCreateInfoBuilder, PhysicalDeviceFeaturesBuilder, PhysicalDeviceProperties, PhysicalDeviceFeatures}
 };
 
-use crate::app::AppData;
+use crate::{
+    app_data::{AppData}
+};
 
 pub trait BootstrapLoader : Debug {
     fn add_required_instance_layers(&self, _required_layers: &mut Vec<*const i8>) -> Result<()> {
