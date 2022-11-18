@@ -9,7 +9,7 @@ use winit::{
     dpi::{LogicalSize},
     window::{Window, WindowBuilder},
     event_loop::{EventLoop, ControlFlow},
-    event::{Event, WindowEvent}
+    event::{Event, WindowEvent, VirtualKeyCode}
 };
 use vulkanalia::{
     loader::{LibloadingLoader, LIBRARY},
@@ -40,6 +40,7 @@ pub struct App {
     pub bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>,
     frame: u32,
     start_time: Instant,
+    destroying: bool,
     needs_new_swapchain: bool
 }
 
@@ -97,6 +98,7 @@ impl App {
             bootstrap_loaders: bootstrap_loaders,
             frame: 0,
             start_time: Instant::now(),
+            destroying: false,
             needs_new_swapchain: false
         })
     }
@@ -372,7 +374,6 @@ impl App {
 
     //Deliberately not a ref, because the run method needs to own "self"
     pub fn run(mut self) -> ! {
-        let mut destroying = false;
         let mut minimized = false;
         info!("Starting window event loop.");
         //TODO: Don't abuse Option<> in the struct in order to call run on the event loop without causing an ownership error
@@ -381,7 +382,7 @@ impl App {
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
             match event {
-                Event::MainEventsCleared if !destroying && !minimized => {
+                Event::MainEventsCleared if !self.destroying && !minimized => {
                     if !self.needs_new_swapchain {
                         //TODO: update game state
 
@@ -401,19 +402,28 @@ impl App {
                 }
                 Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                     info!("Window close requested. Shutting down application...");
-                    let duration = self.start_time.elapsed();
-                    let avg_fps = (self.frame as f32) / duration.as_secs_f32();
-                    info!("Rendered {} frames total over {:?}. Average FPS: {}. Calculation may be incorrect if the window was minimized at any point", self.frame, duration, avg_fps);
-                    destroying = true;
-                    *control_flow = ControlFlow::Exit;
-                    self.destroy();
+                    self.shutdown();
+                }
+                Event::WindowEvent { event: WindowEvent::KeyboardInput { input, .. }, .. } => {
+                    //TODO: pass keyboard input to game state
+
+                    if let Some(keycode) = input.virtual_keycode {
+                        if keycode == VirtualKeyCode::Escape {
+                            info!("Escape key pressed. Shutting down application...");
+                            self.shutdown();
+                        }
+                    }
                 }
                 _ => { }
+            }
+
+            if self.destroying {
+                *control_flow = ControlFlow::Exit;
             }
         });
     }
 
-    pub fn render(&mut self) -> Result<()> {
+    fn render(&mut self) -> Result<()> {
         let swapchain = self.app_data.swapchain.unwrap();
 
         let sync_frame = (self.frame % self.app_data.max_frames_in_flight()) as usize;
@@ -487,7 +497,21 @@ impl App {
         Ok(())
     }
 
-    pub fn destroy(&mut self) {
+    fn shutdown(&mut self) {
+        if self.destroying {
+            warn!("App::shutdown invoked more than once. Ignoring repeat.");
+            return;
+        }
+
+        let duration = self.start_time.elapsed();
+        let avg_fps = (self.frame as f32) / duration.as_secs_f32();
+        info!("Rendered {} frames total over {:?}. Average FPS: {}. Calculation may be incorrect if the window was minimized at any point", self.frame, duration, avg_fps);
+        self.destroying = true;
+
+        self.destroy();
+    }
+
+    fn destroy(&mut self) {
         unsafe {
             self.device.device_wait_idle().unwrap();
 
