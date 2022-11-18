@@ -39,7 +39,8 @@ pub struct App {
     pub device: Device,
     pub bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>,
     frame: u32,
-    start_time: Instant
+    start_time: Instant,
+    needs_new_swapchain: bool
 }
 
 impl App {
@@ -95,7 +96,8 @@ impl App {
             device,
             bootstrap_loaders: bootstrap_loaders,
             frame: 0,
-            start_time: Instant::now()
+            start_time: Instant::now(),
+            needs_new_swapchain: false
         })
     }
 
@@ -335,9 +337,43 @@ impl App {
         Ok(())
     }
 
+    fn recreate_swapchain(&mut self) -> Result<()> {
+        unsafe {
+            self.device.device_wait_idle()?;
+        }
+
+        debug!("Recreating swapchain and related resources (possibly due to window resize)...");
+
+        let last_callback = move |_inst: &Instance, _device: &Device, _window: &Window, _app_data: &mut AppData| -> Result<()> {
+            Ok(())
+        };
+
+        fn create_and_invoke_callback(index: usize, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, last_callback: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData) -> Result<()> {
+            trace!("Invoking callback for index {} to recreate swapchain and related resources...", index);
+            let loader_count = bootstrap_loaders.len();
+            let loader_res = if index == loader_count { None } else { bootstrap_loaders.get(loader_count - index - 1) };
+            match loader_res {
+                Some(loader) => {
+                    let next_callback = |inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData| create_and_invoke_callback(index + 1, bootstrap_loaders, last_callback, inst, device, window, app_data);
+                    loader.recreate_swapchain(inst, device, window, app_data, &next_callback)
+                },
+                None => {
+                    last_callback(inst, device, window, app_data)
+                }
+            }
+        }
+
+        create_and_invoke_callback(0, &self.bootstrap_loaders, &last_callback, &self.inst, &self.device, &self.window, &mut self.app_data)?;
+
+        self.needs_new_swapchain = false;
+
+        Ok(())
+    }
+
     //Deliberately not a ref, because the run method needs to own "self"
     pub fn run(mut self) -> ! {
         let mut destroying = false;
+        let mut minimized = false;
         info!("Starting window event loop.");
         //TODO: Don't abuse Option<> in the struct in order to call run on the event loop without causing an ownership error
         //TODO: Add Ctrl+C handler to gracefully shut down app
@@ -345,16 +381,29 @@ impl App {
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
             match event {
-                Event::MainEventsCleared if !destroying => {
-                    self.render().unwrap();
-                    // time!(self.render().unwrap(), "Rendering frame {}", self.frame);
-                    self.frame += 1;
+                Event::MainEventsCleared if !destroying && !minimized => {
+                    if !self.needs_new_swapchain {
+                        //TODO: update game state
+
+                        self.render().unwrap();
+                        self.frame += 1;
+                    }
+
+                    if self.needs_new_swapchain {
+                        self.recreate_swapchain().unwrap();
+                    }
+
+                    //TODO: sleep until next frame
+                }
+                Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
+                    self.needs_new_swapchain = true;
+                    minimized = size.width == 0 || size.height == 0;
                 }
                 Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                     info!("Window close requested. Shutting down application...");
                     let duration = self.start_time.elapsed();
                     let avg_fps = (self.frame as f32) / duration.as_secs_f32();
-                    info!("Rendered {} frames total over {:?}. Average FPS: {}", self.frame, duration, avg_fps);
+                    info!("Rendered {} frames total over {:?}. Average FPS: {}. Calculation may be incorrect if the window was minimized at any point", self.frame, duration, avg_fps);
                     destroying = true;
                     *control_flow = ControlFlow::Exit;
                     self.destroy();
@@ -376,7 +425,16 @@ impl App {
         unsafe {
             self.device.wait_for_fences(&[in_flight_fence], true, u64::MAX)?;
 
-            image_index = self.device.acquire_next_image_khr(swapchain, u64::MAX, image_available, vk::Fence::null())?.0 as usize;
+            let result = self.device.acquire_next_image_khr(swapchain, u64::MAX, image_available, vk::Fence::null());
+            match result {
+                Ok((idx, _)) => image_index = idx as usize,
+                Err(vk::ErrorCode::OUT_OF_DATE_KHR) => {
+                    warn!("Suboptimal or out-of-date swapchain detected before frame render");
+                    self.needs_new_swapchain = true;
+                    return Ok(());
+                },
+                Err(e) => return Err(anyhow!(e))
+            }
 
             let image_in_flight = self.app_data.images_in_flight[image_index];
             if !image_in_flight.is_null() {
@@ -413,7 +471,17 @@ impl App {
 
         let present_queue = self.app_data.present_queue.unwrap();
         unsafe {
-            self.device.queue_present_khr(present_queue, &present_info)?;
+            let result = self.device.queue_present_khr(present_queue, &present_info);
+
+            if result == Ok(vk::SuccessCode::SUBOPTIMAL_KHR) || result == Err(vk::ErrorCode::OUT_OF_DATE_KHR) {
+                warn!("Suboptimal or out-of-date swapchain detected during frame render");
+                self.needs_new_swapchain = true;
+                return Ok(());
+            }
+
+            if let Err(e) = result {
+                return Err(anyhow!(e))
+            }
         }
 
         Ok(())
@@ -428,7 +496,6 @@ impl App {
             }
 
             debug!("Destroying Vulkan logical device...");
-            self.device.device_wait_idle().unwrap();
             self.device.destroy_device(None);
 
             if let Some(surface) = self.app_data.surface.take() {

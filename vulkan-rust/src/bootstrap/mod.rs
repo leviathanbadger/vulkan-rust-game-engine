@@ -48,4 +48,14 @@ pub trait BootstrapLoader : Debug {
         Ok(())
     }
     fn before_destroy_logical_device(&self, _inst: &Instance, _device: &Device, _app_data: &mut AppData) -> () { }
+
+    fn recreate_swapchain(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData, next: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>) -> Result<()> {
+        trace!("Default BootstrapLoader::recreate_swapchain");
+
+        self.before_destroy_logical_device(inst, device, app_data);
+        next(inst, device, window, app_data)?;
+        self.after_create_logical_device(inst, device, window, app_data)?;
+
+        Ok(())
+    }
 }
