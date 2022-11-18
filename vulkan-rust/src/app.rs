@@ -1,7 +1,11 @@
 use std::{
     collections::{HashSet},
     ffi::{CStr},
-    time::{Instant}
+    time::{Instant},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering}
+    }
 };
 use anyhow::{anyhow, Result};
 use thiserror::Error;
@@ -41,7 +45,8 @@ pub struct App {
     frame: u32,
     start_time: Instant,
     destroying: bool,
-    needs_new_swapchain: bool
+    needs_new_swapchain: bool,
+    shutdown_requested: Arc<AtomicBool>
 }
 
 impl App {
@@ -99,7 +104,8 @@ impl App {
             frame: 0,
             start_time: Instant::now(),
             destroying: false,
-            needs_new_swapchain: false
+            needs_new_swapchain: false,
+            shutdown_requested: Arc::new(AtomicBool::new(false))
         })
     }
 
@@ -376,25 +382,36 @@ impl App {
     pub fn run(mut self) -> ! {
         let mut minimized = false;
         info!("Starting window event loop.");
+
+        #[allow(unused_must_use)] {
+            self.set_ctrlc_handler(self.shutdown_requested.clone());
+        }
+
         //TODO: Don't abuse Option<> in the struct in order to call run on the event loop without causing an ownership error
-        //TODO: Add Ctrl+C handler to gracefully shut down app
         let event_loop = self.event_loop.take().unwrap();
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
             match event {
-                Event::MainEventsCleared if !self.destroying && !minimized => {
-                    if !self.needs_new_swapchain {
-                        //TODO: update game state
-
-                        self.render().unwrap();
-                        self.frame += 1;
+                Event::MainEventsCleared => {
+                    if self.shutdown_requested.load(Ordering::Relaxed) {
+                        info!("Shutdown requested via Ctrl+C or other asynchronous method. Shutting down application...");
+                        self.shutdown();
                     }
 
-                    if self.needs_new_swapchain {
-                        self.recreate_swapchain().unwrap();
-                    }
+                    if !self.destroying && !minimized {
+                        if !self.needs_new_swapchain {
+                            //TODO: update game state
 
-                    //TODO: sleep until next frame
+                            self.render().unwrap();
+                            self.frame += 1;
+                        }
+
+                        if self.needs_new_swapchain {
+                            self.recreate_swapchain().unwrap();
+                        }
+
+                        //TODO: sleep until next frame
+                    }
                 }
                 Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
                     self.needs_new_swapchain = true;
@@ -421,6 +438,20 @@ impl App {
                 *control_flow = ControlFlow::Exit;
             }
         });
+    }
+
+    fn set_ctrlc_handler(&self, shutdown_requested: Arc<AtomicBool>) -> Result<()> {
+        ctrlc::set_handler(move || {
+            warn!("Ctrl+C handled. Application will shut down asynchronously before rendering the next frame.");
+            shutdown_requested.store(true, Ordering::SeqCst);
+        })?;
+
+        Ok(())
+    }
+
+    #[allow(unused)]
+    pub fn create_request_shutdown(&self) -> Arc<AtomicBool> {
+        self.shutdown_requested.clone()
     }
 
     fn render(&mut self) -> Result<()> {
