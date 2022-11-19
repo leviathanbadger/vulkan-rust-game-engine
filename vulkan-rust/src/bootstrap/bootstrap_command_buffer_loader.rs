@@ -129,4 +129,14 @@ impl BootstrapLoader for BootstrapCommandBufferLoader {
         self.destroy_command_buffers(device, app_data);
         self.destroy_command_pool(device, app_data);
     }
+
+    fn recreate_swapchain(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData, next: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>) -> Result<()> {
+        trace!("Recreating command buffers (but not command pool) in recreate_swapchain");
+
+        self.destroy_command_buffers(device, app_data);
+        next(inst, device, window, app_data)?;
+        self.create_command_buffers(device, app_data)?;
+
+        Ok(())
+    }
 }

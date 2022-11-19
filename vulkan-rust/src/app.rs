@@ -399,18 +399,7 @@ impl App {
                     }
 
                     if !self.destroying && !minimized {
-                        if !self.needs_new_swapchain {
-                            //TODO: update game state
-
-                            self.render().unwrap();
-                            self.frame += 1;
-                        }
-
-                        if self.needs_new_swapchain {
-                            self.recreate_swapchain().unwrap();
-                        }
-
-                        //TODO: sleep until next frame
+                        self.game_loop().unwrap();
                     }
                 }
                 Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
@@ -445,6 +434,23 @@ impl App {
             warn!("Ctrl+C handled. Application will shut down asynchronously before rendering the next frame.");
             shutdown_requested.store(true, Ordering::SeqCst);
         })?;
+
+        Ok(())
+    }
+
+    fn game_loop(&mut self) -> Result<()> {
+        if !self.needs_new_swapchain {
+            //TODO: update game state
+
+            self.render()?;
+            self.frame += 1;
+        }
+
+        if self.needs_new_swapchain {
+            self.recreate_swapchain()?;
+        }
+
+        //TODO: sleep until next frame
 
         Ok(())
     }

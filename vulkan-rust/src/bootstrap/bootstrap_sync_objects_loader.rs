@@ -87,4 +87,12 @@ impl BootstrapLoader for BootstrapSyncObjectsLoader {
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
         self.destroy_sync_objects(device, app_data);
     }
+
+    fn recreate_swapchain(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData, next: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>) -> Result<()> {
+        trace!("Recreating nothing in recreate_swapchain");
+
+        next(inst, device, window, app_data)?;
+
+        Ok(())
+    }
 }
