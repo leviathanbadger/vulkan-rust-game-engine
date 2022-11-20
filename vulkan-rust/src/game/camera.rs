@@ -8,7 +8,7 @@ use vulkanalia::{
 pub use crate::game::has_camera_matrix::{HasCameraMatrix};
 
 lazy_static! {
-    pub static ref ORIGIN: glm::Vec3 = glm::vec3(0.0, 0.0, 0.0);
+    pub static ref ORIGIN: glm::DVec3 = glm::zero::<glm::DVec3>();
     pub static ref DEFAULT_UP: glm::Vec3 = glm::vec3(0.0, 1.0, 0.0);
 }
 
@@ -22,13 +22,12 @@ pub enum CameraKind {
 
 #[derive(Debug, Copy, Clone)]
 pub struct Camera {
-    pos: glm::Vec3,
+    pos: glm::DVec3,
     orient: glm::Quat,
     near: f32,
     far: f32,
     kind: CameraKind,
-    fovy: f32,
-    is_projection_dirty: bool
+    fovy: f32
 }
 
 impl Default for Camera {
@@ -39,18 +38,17 @@ impl Default for Camera {
             near: 0.001,
             far: 1000.0,
             kind: Default::default(),
-            fovy: 45.0,
-            is_projection_dirty: true
+            fovy: 45.0
         }
     }
 }
 
 #[allow(unused)]
 impl Camera {
-    pub fn pos(&self) -> glm::Vec3 {
+    pub fn pos(&self) -> glm::DVec3 {
         self.pos
     }
-    pub fn set_pos(&mut self, pos: glm::Vec3) -> () {
+    pub fn set_pos(&mut self, pos: glm::DVec3) -> () {
         self.pos = pos;
     }
 
@@ -61,11 +59,11 @@ impl Camera {
         self.orient = orient;
     }
 
-    pub fn look_at(&mut self, target: glm::Vec3) -> () {
+    pub fn look_at(&mut self, target: glm::DVec3) -> () {
         self.look_at_up(target, *DEFAULT_UP);
     }
-    pub fn look_at_up(&mut self, target: glm::Vec3, up: glm::Vec3) -> () {
-        let dir = target - self.pos;
+    pub fn look_at_up(&mut self, target: glm::DVec3, up: glm::Vec3) -> () {
+        let dir = glm::convert::<glm::DVec3, glm::Vec3>(target - self.pos);
         self.orient = glm::quat_look_at(&dir, &up);
     }
 
@@ -87,35 +85,21 @@ impl Camera {
         self.kind
     }
     pub fn set_kind(&mut self, kind: CameraKind) -> () {
-        if self.kind != kind {
-            self.kind = kind;
-            self.is_projection_dirty = true;
-        }
+        self.kind = kind;
     }
 
     pub fn fovy(&self) -> f32 {
         self.fovy
     }
     pub fn set_fovy(&mut self, fovy: f32) -> () {
-        if self.fovy != fovy {
-            self.fovy = fovy;
-            if self.kind == CameraKind::Perspective {
-                self.is_projection_dirty = true;
-            }
-        }
-    }
-
-    pub fn is_projection_dirty(&self) -> bool {
-        self.is_projection_dirty
-    }
-    pub fn clear_projection_dirty(&mut self) -> () {
-        self.is_projection_dirty = false;
+        self.fovy = fovy;
     }
 }
 
 impl HasCameraMatrix for Camera {
-    fn get_view_matrix(&self) -> Result<glm::Mat4> {
-        let mut view = glm::quat_to_mat4(&self.orient);
+    fn get_view_matrix(&self) -> Result<glm::DMat4> {
+        let view_mat4 = glm::quat_to_mat4(&self.orient);
+        let mut view = glm::convert::<glm::Mat4, glm::DMat4>(view_mat4);
         view = glm::translate(&view, &-self.pos);
 
         Ok(view)

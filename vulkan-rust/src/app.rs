@@ -557,10 +557,12 @@ impl App {
         let view = self.camera.get_view_matrix()?;
         let projection = self.camera.get_projection_matrix(extent)?;
 
+        let view_mat4 = glm::convert::<glm::DMat4, glm::Mat4>(view);
+
         let buffer = &mut self.app_data.uniform_buffers[sync_frame];
         let ubo = UniformBufferObject {
             proj: projection,
-            view: view,
+            view: view_mat4,
             frame_index: self.frame,
             time_in_seconds: self.start_time.elapsed().as_secs_f32()
         };
