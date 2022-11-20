@@ -9,6 +9,7 @@ use crate::{
         bootstrap_pipeline_loader::BootstrapPipelineLoader,
         bootstrap_swapchain_loader::BootstrapSwapchainLoader,
         bootstrap_sync_objects_loader::BootstrapSyncObjectsLoader,
+        bootstrap_uniform_loader::BootstrapUniformLoader,
         bootstrap_validation_loader::BootstrapValidationLoader
     }
 };
@@ -54,6 +55,7 @@ impl AppBuilder {
 
     pub fn add_default_bootstrap_loaders(self) -> Self {
         self.add_bootstrap_loader(Box::new(BootstrapSwapchainLoader::new()))
+            .add_bootstrap_loader(Box::new(BootstrapUniformLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapPipelineLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapFramebufferLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapCommandBufferLoader::new()))
