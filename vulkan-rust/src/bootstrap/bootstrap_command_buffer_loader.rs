@@ -1,13 +1,19 @@
+use std::{
+    mem::{size_of},
+    ptr::{copy_nonoverlapping as memcpy}
+};
+
 use super::{BootstrapLoader};
 
-use anyhow::{Result};
+use anyhow::{anyhow, Result};
 use winit::window::{Window};
 use vulkanalia::{
     prelude::v1_0::*
 };
 
 use crate::{
-    app_data::{AppData}
+    app_data::{AppData},
+    shader_input::static_screen_space::{Vertex, VERTICES}
 };
 
 #[derive(Debug, Default)]
@@ -39,6 +45,69 @@ impl BootstrapCommandBufferLoader {
             debug!("Destroying command pool...");
             unsafe {
                 device.destroy_command_pool(command_pool, None);
+            }
+        }
+    }
+
+    fn get_memory_type_index(&self, app_data: &AppData, properties: vk::MemoryPropertyFlags, requirements: vk::MemoryRequirements) -> Result<u32> {
+        let memory = app_data.memory_properties;
+        (0..memory.memory_type_count)
+            .find(|i| {
+                let is_suitable = (requirements.memory_type_bits & (1 << i)) != 0;
+                let memory_type = memory.memory_types[*i as usize];
+                is_suitable && memory_type.property_flags.contains(properties)
+            })
+            .ok_or_else(|| anyhow!("Failed to find suitable memory type for buffer"))
+    }
+
+    fn create_vertex_buffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+        let buffer_info = vk::BufferCreateInfo::builder()
+            .size((size_of::<Vertex>() * VERTICES.len()) as u64)
+            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let vertex_buffer: vk::Buffer;
+        let requirements: vk::MemoryRequirements;
+        unsafe {
+            debug!("Creating vertex buffer...");
+            vertex_buffer = device.create_buffer(&buffer_info, None)?;
+            requirements = device.get_buffer_memory_requirements(vertex_buffer);
+        }
+        app_data.vertex_buffer = Some(vertex_buffer);
+
+        let memory_type_index = self.get_memory_type_index(app_data, vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE, requirements)?;
+        let memory_info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(requirements.size)
+            .memory_type_index(memory_type_index);
+
+        let vertex_buffer_memory: vk::DeviceMemory;
+        unsafe {
+            vertex_buffer_memory = device.allocate_memory(&memory_info, None)?;
+            device.bind_buffer_memory(vertex_buffer, vertex_buffer_memory, 0)?;
+        }
+        app_data.vertex_buffer_memory = Some(vertex_buffer_memory);
+
+        unsafe {
+            let memory = device.map_memory(vertex_buffer_memory, 0, buffer_info.size, vk::MemoryMapFlags::empty())?;
+            memcpy(VERTICES.as_ptr(), memory.cast(), VERTICES.len());
+            device.unmap_memory(vertex_buffer_memory);
+        }
+
+        Ok(())
+    }
+
+    fn destroy_vertex_buffers(&self, device: &Device, app_data: &mut AppData) -> () {
+        debug!("Destroying vertex buffer...");
+
+        if let Some(vertex_buffer) = app_data.vertex_buffer.take() {
+            unsafe {
+                device.destroy_buffer(vertex_buffer, None);
+            }
+        }
+
+        if let Some(vertex_buffer_memory) = app_data.vertex_buffer_memory.take() {
+            unsafe {
+                device.free_memory(vertex_buffer_memory, None);
             }
         }
     }
@@ -94,7 +163,9 @@ impl BootstrapCommandBufferLoader {
                 let pipeline = app_data.pipeline.unwrap();
                 device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
 
-                device.cmd_draw(*command_buffer, 3, 1, 0, 0);
+                let vertex_buffer = app_data.vertex_buffer.unwrap();
+                device.cmd_bind_vertex_buffers(*command_buffer, 0, &[vertex_buffer], &[0]);
+                device.cmd_draw(*command_buffer, VERTICES.len() as u32, 1, 0, 0);
 
                 device.cmd_end_render_pass(*command_buffer);
 
@@ -120,6 +191,7 @@ impl BootstrapCommandBufferLoader {
 impl BootstrapLoader for BootstrapCommandBufferLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
         self.create_command_pool(device, app_data)?;
+        self.create_vertex_buffers(device, app_data)?;
         self.create_command_buffers(device, app_data)?;
 
         Ok(())
@@ -127,6 +199,7 @@ impl BootstrapLoader for BootstrapCommandBufferLoader {
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
         self.destroy_command_buffers(device, app_data);
+        self.destroy_vertex_buffers(device, app_data);
         self.destroy_command_pool(device, app_data);
     }
 

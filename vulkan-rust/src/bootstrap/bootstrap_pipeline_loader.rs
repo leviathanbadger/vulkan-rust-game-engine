@@ -7,7 +7,8 @@ use vulkanalia::{
 };
 
 use crate::{
-    app_data::{AppData}
+    app_data::{AppData},
+    shader_input::static_screen_space::{Vertex}
 };
 
 #[derive(Debug, Default)]
@@ -93,8 +94,8 @@ impl BootstrapPipelineLoader {
     }
 
     fn create_pipeline(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
-        let vert = include_bytes!("../../shaders/static_tri/shader.vert.spv");
-        let frag = include_bytes!("../../shaders/static_tri/shader.frag.spv");
+        let vert = include_bytes!("../../shaders/static_screen_space/shader.vert.spv");
+        let frag = include_bytes!("../../shaders/static_screen_space/shader.frag.spv");
 
         debug!("Creating vertex and fragment shader modules...");
         let vert_module = self.create_shader_module(device, &vert[..])?;
@@ -110,7 +111,11 @@ impl BootstrapPipelineLoader {
             .module(frag_module)
             .name(b"main\0");
 
-        let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder();
+        let binding_descriptions = &[Vertex::binding_description()];
+        let attribute_descriptions = &Vertex::attribute_descriptions();
+        let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder()
+            .vertex_binding_descriptions(binding_descriptions)
+            .vertex_attribute_descriptions(attribute_descriptions);
 
         let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST)

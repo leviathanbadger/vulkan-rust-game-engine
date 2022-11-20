@@ -6,6 +6,7 @@ use vulkanalia::{
 pub struct AppData {
     pub messenger: Option<vk::DebugUtilsMessengerEXT>,
     pub physical_device: Option<vk::PhysicalDevice>,
+    pub memory_properties: vk::PhysicalDeviceMemoryProperties,
     pub graphics_queue: Option<vk::Queue>,
     pub present_queue: Option<vk::Queue>,
     pub graphics_queue_family: Option<u32>,
@@ -21,6 +22,8 @@ pub struct AppData {
     pub pipeline: Option<vk::Pipeline>,
     pub framebuffers: Vec<vk::Framebuffer>,
     pub command_pool: Option<vk::CommandPool>,
+    pub vertex_buffer: Option<vk::Buffer>,
+    pub vertex_buffer_memory: Option<vk::DeviceMemory>,
     pub command_buffers: Vec<vk::CommandBuffer>,
     max_frames_in_flight: u32,
     pub image_available_semaphores: Vec<vk::Semaphore>,
@@ -36,6 +39,7 @@ impl Default for AppData {
 
             messenger: Default::default(),
             physical_device: Default::default(),
+            memory_properties: Default::default(),
             graphics_queue: Default::default(),
             present_queue: Default::default(),
             graphics_queue_family: Default::default(),
@@ -51,6 +55,8 @@ impl Default for AppData {
             pipeline: Default::default(),
             framebuffers: Default::default(),
             command_pool: Default::default(),
+            vertex_buffer: Default::default(),
+            vertex_buffer_memory: Default::default(),
             command_buffers: Default::default(),
             image_available_semaphores: Default::default(),
             render_finished_semaphores: Default::default(),

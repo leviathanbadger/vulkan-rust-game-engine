@@ -221,6 +221,7 @@ impl App {
                 //TODO: select _best_ graphics card, not just the first one in the list
                 info!("Using graphics card ({} - {}).", physical_device.as_raw(), properties.device_name);
                 app_data.physical_device = Some(physical_device);
+                app_data.memory_properties = inst.get_physical_device_memory_properties(physical_device);
                 return Ok(());
             }
         }
