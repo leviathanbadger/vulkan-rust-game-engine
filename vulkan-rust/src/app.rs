@@ -30,7 +30,11 @@ use crate::{
         BootstrapLoader,
         queue_family_indices::QueueFamilyIndices
     },
-    shader_input::uniform_buffer_object::{UniformBufferObject},
+    shader_input::{
+        uniform_buffer_object::{UniformBufferObject},
+        push_constants::{PushConstants},
+        simple::VERTICES
+    },
     game::camera::{Camera, HasCameraMatrix, ORIGIN}
 };
 
@@ -508,6 +512,7 @@ impl App {
         self.app_data.images_in_flight[image_index] = in_flight_fence;
 
         self.update_uniform_buffer(image_index)?;
+        self.update_command_buffer(image_index)?;
 
         let wait_semaphores = &[image_available];
         let signal_semaphores = &[render_finished];
@@ -552,21 +557,89 @@ impl App {
         Ok(())
     }
 
-    fn update_uniform_buffer(&mut self, sync_frame: usize) -> Result<()> {
+    fn update_uniform_buffer(&mut self, image_index: usize) -> Result<()> {
         let extent = self.app_data.swapchain_extent.unwrap();
-        let view = self.camera.get_view_matrix()?;
         let projection = self.camera.get_projection_matrix(extent)?;
 
-        let view_mat4 = glm::convert::<glm::DMat4, glm::Mat4>(view);
-
-        let buffer = &mut self.app_data.uniform_buffers[sync_frame];
+        let buffer = &mut self.app_data.uniform_buffers[image_index];
         let ubo = UniformBufferObject {
             proj: projection,
-            view: view_mat4,
             frame_index: self.frame,
             time_in_seconds: self.start_time.elapsed().as_secs_f32()
         };
         buffer.set_data(&self.device, &ubo)?;
+
+        Ok(())
+    }
+
+    fn update_command_buffer(&mut self, image_index: usize) -> Result<()> {
+        let command_buffer = self.app_data.command_buffers[image_index];
+        unsafe {
+            self.device.reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
+        }
+
+        let inheritance = vk::CommandBufferInheritanceInfo::builder();
+
+        let begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
+            .inheritance_info(&inheritance);
+
+        unsafe {
+            self.device.begin_command_buffer(command_buffer, &begin_info)?;
+        }
+
+        let extent = self.app_data.swapchain_extent.unwrap();
+        let render_area = vk::Rect2D::builder()
+            .offset(vk::Offset2D::default())
+            .extent(extent);
+
+        let color_clear_value = vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [0.0, 0.0, 0.0, 1.0]
+            }
+        };
+
+        let render_pass = self.app_data.render_pass.unwrap();
+        let framebuffer = self.app_data.framebuffers[image_index];
+        let clear_values = &[color_clear_value];
+        let render_pass_info = vk::RenderPassBeginInfo::builder()
+            .render_pass(render_pass)
+            .framebuffer(framebuffer)
+            .render_area(render_area)
+            .clear_values(clear_values);
+
+        let pipeline = self.app_data.pipeline.unwrap();
+        let pipeline_layout = self.app_data.pipeline_layout.unwrap();
+        let descriptor_set = self.app_data.descriptor_sets[image_index];
+
+        unsafe {
+            self.device.cmd_begin_render_pass(command_buffer, &render_pass_info, vk::SubpassContents::INLINE);
+
+            self.device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
+
+            self.device.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
+
+            {
+                let vertex_buffer = self.app_data.vertex_buffer.unwrap().raw_buffer().unwrap();
+                self.device.cmd_bind_vertex_buffers(command_buffer, 0, &[vertex_buffer], &[0]);
+
+                let angle = self.start_time.elapsed().as_secs_f64() * glm::radians(&glm::vec1(90.0))[0];
+                let model = glm::rotate(&glm::identity(), angle, &glm::vec3(0.0f64, 1.0f64, 0.0f64));
+                let view = self.camera.get_view_matrix()?;
+                let viewmodel = view * model;
+                let push_constants = PushConstants {
+                    viewmodel: glm::convert::<glm::DMat4, glm::Mat4>(viewmodel)
+                };
+                let push_constants_bytes = push_constants.as_bytes();
+                self.device.cmd_push_constants(command_buffer, pipeline_layout, vk::ShaderStageFlags::ALL_GRAPHICS, 0, push_constants_bytes);
+
+                self.device.cmd_draw(command_buffer, VERTICES.len() as u32, 1, 0, 0);
+            }
+
+            self.device.cmd_end_render_pass(command_buffer);
+
+            self.device.end_command_buffer(command_buffer)?;
+        }
 
         Ok(())
     }

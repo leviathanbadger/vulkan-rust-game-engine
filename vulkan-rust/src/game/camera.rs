@@ -110,7 +110,7 @@ impl HasCameraMatrix for Camera {
             CameraKind::Perspective => {
                 let aspect_ratio = bounds.width as f32 / bounds.height as f32;
                 let fovy = glm::radians(&glm::vec1(self.fovy))[0];
-                glm::perspective(aspect_ratio, fovy, self.near, self.far)
+                glm::perspective_rh_zo(aspect_ratio, fovy, self.near, self.far)
             }
             CameraKind::Orthographic => {
                 glm::ortho(-(bounds.width as f32) / 2.0, (bounds.width as f32) / 2.0, -(bounds.height as f32) / 2.0, (bounds.height as f32) / 2.0, self.near, self.far)

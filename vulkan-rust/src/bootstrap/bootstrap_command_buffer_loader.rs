@@ -23,7 +23,7 @@ impl BootstrapCommandBufferLoader {
 
     fn create_command_pool(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
         let command_pool_info = vk::CommandPoolCreateInfo::builder()
-            .flags(vk::CommandPoolCreateFlags::empty())
+            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
             .queue_family_index(app_data.graphics_queue_family.unwrap());
 
         let command_pool: vk::CommandPool;
@@ -81,52 +81,6 @@ impl BootstrapCommandBufferLoader {
             debug!("Command buffers created: {:?}", command_buffers);
         }
         app_data.command_buffers = command_buffers;
-
-        let extent = app_data.swapchain_extent.unwrap();
-        for (q, command_buffer) in app_data.command_buffers.iter().enumerate() {
-            let inheritance = vk::CommandBufferInheritanceInfo::builder();
-
-            let begin_info = vk::CommandBufferBeginInfo::builder()
-                .flags(vk::CommandBufferUsageFlags::empty())
-                .inheritance_info(&inheritance);
-
-            unsafe {
-                device.begin_command_buffer(*command_buffer, &begin_info)?;
-            }
-
-            let render_area = vk::Rect2D::builder()
-                .offset(vk::Offset2D::default())
-                .extent(extent);
-
-            let color_clear_value = vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 1.0]
-                }
-            };
-
-            let clear_values = &[color_clear_value];
-            let render_pass_info = vk::RenderPassBeginInfo::builder()
-                .render_pass(app_data.render_pass.unwrap())
-                .framebuffer(app_data.framebuffers[q])
-                .render_area(render_area)
-                .clear_values(clear_values);
-
-            unsafe {
-                device.cmd_begin_render_pass(*command_buffer, &render_pass_info, vk::SubpassContents::INLINE);
-
-                let pipeline = app_data.pipeline.unwrap();
-                device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
-
-                let vertex_buffer = app_data.vertex_buffer.unwrap().raw_buffer().unwrap();
-                device.cmd_bind_vertex_buffers(*command_buffer, 0, &[vertex_buffer], &[0]);
-                device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, app_data.pipeline_layout.unwrap(), 0, &[app_data.descriptor_sets[q]], &[]);
-                device.cmd_draw(*command_buffer, VERTICES.len() as u32, 1, 0, 0);
-
-                device.cmd_end_render_pass(*command_buffer);
-
-                device.end_command_buffer(*command_buffer)?;
-            }
-        }
 
         Ok(())
     }

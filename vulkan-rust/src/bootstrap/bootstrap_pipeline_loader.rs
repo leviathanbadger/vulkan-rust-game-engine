@@ -1,5 +1,6 @@
 use super::{BootstrapLoader};
 
+use std::mem::{size_of};
 use anyhow::{anyhow, Result};
 use winit::window::{Window};
 use vulkanalia::{
@@ -8,7 +9,10 @@ use vulkanalia::{
 
 use crate::{
     app_data::{AppData},
-    shader_input::simple::{Vertex}
+    shader_input::{
+        simple::{Vertex},
+        push_constants::PushConstants
+    }
 };
 
 #[derive(Debug, Default)]
@@ -172,8 +176,16 @@ impl BootstrapPipelineLoader {
 
         let desc_set_layout = app_data.descriptor_set_layout.unwrap();
         let set_layouts = &[desc_set_layout];
+
+        let vert_push_constant_range = vk::PushConstantRange::builder()
+            .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS)
+            .offset(0)
+            .size(size_of::<PushConstants>() as u32);
+        let push_constant_ranges = &[vert_push_constant_range];
+
         let layout_info = vk::PipelineLayoutCreateInfo::builder()
-            .set_layouts(set_layouts);
+            .set_layouts(set_layouts)
+            .push_constant_ranges(push_constant_ranges);
         let pipeline_layout: vk::PipelineLayout;
         unsafe {
             debug!("Creating pipeline layout...");
