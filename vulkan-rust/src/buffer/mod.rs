@@ -20,17 +20,27 @@ pub struct Buffer<T> where T : Copy + Clone {
     max_element_count: usize,
     buffer: Option<vk::Buffer>,
     buffer_memory: Option<vk::DeviceMemory>,
+
+    require_submit: bool,
+    staging_buffer: Option<vk::Buffer>,
+    staging_buffer_memory: Option<vk::DeviceMemory>,
+
     phantom: PhantomData<T>
 }
 
 impl<T> Buffer<T> where T : Copy + Clone {
-    pub fn new(usage: vk::BufferUsageFlags, max_element_count: usize) -> Self {
+    pub fn new(usage: vk::BufferUsageFlags, max_element_count: usize, require_submit: bool) -> Self {
         Self {
             usage,
             curr_element_count: 0,
             max_element_count,
             buffer: None,
             buffer_memory: None,
+
+            require_submit,
+            staging_buffer: None,
+            staging_buffer_memory: None,
+
             phantom: PhantomData
         }
     }
@@ -62,32 +72,62 @@ impl<T> Buffer<T> where T : Copy + Clone {
         self.buffer_memory
     }
 
-    pub fn create(&mut self, device: &Device, memory: vk::PhysicalDeviceMemoryProperties) -> Result<()> {
+    #[allow(unused)]
+    pub unsafe fn raw_staging_buffer(&self) -> Option<vk::Buffer> {
+        self.staging_buffer
+    }
+
+    #[allow(unused)]
+    pub unsafe fn raw_staging_buffer_memory(&self) -> Option<vk::DeviceMemory> {
+        self.staging_buffer_memory
+    }
+
+    fn create_buffer(&self, device: &Device, usage_flags: vk::BufferUsageFlags, memory_flags: vk::MemoryPropertyFlags, memory: vk::PhysicalDeviceMemoryProperties) -> Result<(vk::Buffer, vk::DeviceMemory)> {
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(self.allocated_buffer_size())
-            .usage(self.usage)
+            .usage(usage_flags)
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         let buff: vk::Buffer;
         let requirements: vk::MemoryRequirements;
         unsafe {
-            debug!("Creating vertex buffer...");
             buff = device.create_buffer(&buffer_info, None)?;
             requirements = device.get_buffer_memory_requirements(buff);
         }
-        self.buffer = Some(buff);
 
-        let memory_type_index = self.get_memory_type_index(memory, vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE, requirements)?;
+        let memory_type_index = self.get_memory_type_index(memory, memory_flags, requirements)?;
         let memory_info = vk::MemoryAllocateInfo::builder()
             .allocation_size(requirements.size)
             .memory_type_index(memory_type_index);
 
         let buff_memory: vk::DeviceMemory;
         unsafe {
+            //TODO: write custom memory allocator so we don't need to do this for every individual buffer
             buff_memory = device.allocate_memory(&memory_info, None)?;
             device.bind_buffer_memory(buff, buff_memory, 0)?;
         }
-        self.buffer_memory = Some(buff_memory);
+
+        Ok((buff, buff_memory))
+    }
+
+    pub fn create(&mut self, device: &Device, memory: vk::PhysicalDeviceMemoryProperties) -> Result<()> {
+        {
+            let usage_flags = if self.require_submit { self.usage | vk::BufferUsageFlags::TRANSFER_DST } else { self.usage };
+            let memory_flags = if self.require_submit { vk::MemoryPropertyFlags::DEVICE_LOCAL } else { vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE };
+            let (buff, buff_memory) = self.create_buffer(device, usage_flags, memory_flags, memory)?;
+
+            self.buffer = Some(buff);
+            self.buffer_memory = Some(buff_memory);
+        }
+
+        if self.require_submit {
+            let usage_flags = vk::BufferUsageFlags::TRANSFER_SRC;
+            let memory_flags = vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE;
+            let (buff, buff_memory) = self.create_buffer(device, usage_flags, memory_flags, memory)?;
+
+            self.staging_buffer = Some(buff);
+            self.staging_buffer_memory = Some(buff_memory);
+        }
 
         Ok(())
     }
@@ -109,11 +149,64 @@ impl<T> Buffer<T> where T : Copy + Clone {
     }
 
     unsafe fn set_data_from_ptr(&mut self, device: &Device, data_ptr: *const T, count: usize) -> Result<()> {
-        let buff_memory = self.buffer_memory.unwrap();
+        let buff_memory = if self.require_submit { self.staging_buffer_memory.unwrap() } else { self.buffer_memory.unwrap() };
 
         let memory = device.map_memory(buff_memory, 0, self.used_buffer_size(), vk::MemoryMapFlags::empty())?;
         memcpy(data_ptr, memory.cast(), count);
         device.unmap_memory(buff_memory);
+
+        Ok(())
+    }
+
+    pub fn submit(&self, device: &Device, command_pool: &vk::CommandPool, submit_queue: &vk::Queue) -> Result<()> {
+        if !self.require_submit {
+            warn!("Buffer submitted that doesn't require data to be submitted.");
+            return Ok(());
+        }
+
+        let cmd_buff_info = vk::CommandBufferAllocateInfo::builder()
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_pool(*command_pool)
+            .command_buffer_count(1);
+
+        let command_buffer: vk::CommandBuffer;
+        unsafe {
+            command_buffer = device.allocate_command_buffers(&cmd_buff_info)?[0];
+        }
+
+        let begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        unsafe {
+            device.begin_command_buffer(command_buffer, &begin_info)?;
+
+            self.write_submit_to_command_buffer(device, &command_buffer)?;
+
+            device.end_command_buffer(command_buffer)?;
+        }
+
+        let command_buffers = &[command_buffer];
+        let submit_info = vk::SubmitInfo::builder()
+            .command_buffers(command_buffers);
+
+        unsafe {
+            device.queue_submit(*submit_queue, &[submit_info], vk::Fence::null())?;
+            device.queue_wait_idle(*submit_queue)?;
+
+            device.free_command_buffers(*command_pool, command_buffers);
+        }
+
+        Ok(())
+    }
+
+    pub fn write_submit_to_command_buffer(&self, device: &Device, command_buffer: &vk::CommandBuffer) -> Result<()> {
+        unsafe {
+            let src = self.staging_buffer.unwrap();
+            let dst = self.buffer.unwrap();
+            let regions = vk::BufferCopy::builder()
+                .size(self.used_buffer_size());
+            device.cmd_copy_buffer(*command_buffer, src, dst, &[regions]);
+        }
 
         Ok(())
     }
@@ -126,6 +219,18 @@ impl<T> Buffer<T> where T : Copy + Clone {
         }
 
         if let Some(buff_memory) = self.buffer_memory.take() {
+            unsafe {
+                device.free_memory(buff_memory, None);
+            }
+        }
+
+        if let Some(buff) = self.staging_buffer.take() {
+            unsafe {
+                device.destroy_buffer(buff, None);
+            }
+        }
+
+        if let Some(buff_memory) = self.staging_buffer_memory.take() {
             unsafe {
                 device.free_memory(buff_memory, None);
             }

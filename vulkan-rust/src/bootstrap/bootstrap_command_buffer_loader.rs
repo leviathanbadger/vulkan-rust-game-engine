@@ -21,25 +21,42 @@ impl BootstrapCommandBufferLoader {
         Self::default()
     }
 
-    fn create_command_pool(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+    fn create_command_pool(&self, device: &Device, flags: vk::CommandPoolCreateFlags, queue_family: u32) -> Result<vk::CommandPool> {
         let command_pool_info = vk::CommandPoolCreateInfo::builder()
-            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-            .queue_family_index(app_data.graphics_queue_family.unwrap());
+            .flags(flags)
+            .queue_family_index(queue_family);
 
-        let command_pool: vk::CommandPool;
         unsafe {
-            debug!("Creating command pool...");
-            command_pool = device.create_command_pool(&command_pool_info, None)?;
-            debug!("Command pool created: {:?}", command_pool);
+            let command_pool = device.create_command_pool(&command_pool_info, None)?;
+
+            Ok(command_pool)
         }
-        app_data.command_pool = Some(command_pool);
+    }
+
+    fn create_command_pools(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+        debug!("Creating command pools...");
+
+        let graphics_queue_family = app_data.graphics_queue_family.unwrap();
+        app_data.command_pool = Some(self.create_command_pool(device, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER, graphics_queue_family)?);
+
+        let transfer_queue_family = graphics_queue_family; //TODO MAYBE: use separate queue for transient operations (memory transfer for example)
+        app_data.transient_command_pool = Some(self.create_command_pool(device, vk::CommandPoolCreateFlags::TRANSIENT, transfer_queue_family)?);
+
+        debug!("Command pools created. Standard: {:?}, transient: {:?}", app_data.command_pool.unwrap(), app_data.transient_command_pool.unwrap());
 
         Ok(())
     }
 
-    fn destroy_command_pool(&self, device: &Device, app_data: &mut AppData) -> () {
+    fn destroy_command_pools(&self, device: &Device, app_data: &mut AppData) -> () {
+        debug!("Destroying command pools...");
+
         if let Some(command_pool) = app_data.command_pool.take() {
-            debug!("Destroying command pool...");
+            unsafe {
+                device.destroy_command_pool(command_pool, None);
+            }
+        }
+
+        if let Some(command_pool) = app_data.transient_command_pool.take() {
             unsafe {
                 device.destroy_command_pool(command_pool, None);
             }
@@ -48,10 +65,11 @@ impl BootstrapCommandBufferLoader {
 
     fn create_vertex_buffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
         debug!("Creating vertex buffer...");
-        let mut buffer = Buffer::<Vertex>::new(vk::BufferUsageFlags::VERTEX_BUFFER, VERTICES.len());
+        let mut buffer = Buffer::<Vertex>::new(vk::BufferUsageFlags::VERTEX_BUFFER, VERTICES.len(), true);
 
         buffer.create(device, app_data.memory_properties)?;
         buffer.set_data(device, &*VERTICES)?;
+        buffer.submit(device, &app_data.transient_command_pool.unwrap(), &app_data.graphics_queue.unwrap())?;
 
         app_data.vertex_buffer = Some(buffer);
 
@@ -99,7 +117,7 @@ impl BootstrapCommandBufferLoader {
 
 impl BootstrapLoader for BootstrapCommandBufferLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
-        self.create_command_pool(device, app_data)?;
+        self.create_command_pools(device, app_data)?;
         self.create_vertex_buffers(device, app_data)?;
         self.create_command_buffers(device, app_data)?;
 
@@ -109,7 +127,7 @@ impl BootstrapLoader for BootstrapCommandBufferLoader {
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
         self.destroy_command_buffers(device, app_data);
         self.destroy_vertex_buffers(device, app_data);
-        self.destroy_command_pool(device, app_data);
+        self.destroy_command_pools(device, app_data);
     }
 
     fn recreate_swapchain(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData, next: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>) -> Result<()> {

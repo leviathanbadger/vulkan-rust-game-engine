@@ -58,7 +58,7 @@ impl BootstrapUniformLoader {
         debug!("Creating uniform buffers...");
         let mut uniform_buffers = app_data.swapchain_images.iter()
             .map(|_| {
-                Buffer::<UniformBufferObject>::new(vk::BufferUsageFlags::UNIFORM_BUFFER, 1)
+                Buffer::<UniformBufferObject>::new(vk::BufferUsageFlags::UNIFORM_BUFFER, 1, false)
             })
             .collect::<Vec<_>>();
 
