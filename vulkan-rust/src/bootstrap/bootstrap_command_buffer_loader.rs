@@ -1,11 +1,8 @@
-use std::{
-    mem::{size_of},
-    ptr::{copy_nonoverlapping as memcpy}
-};
-
 use super::{BootstrapLoader};
-
-use anyhow::{anyhow, Result};
+use std::{
+    mem::{size_of}
+};
+use anyhow::{Result};
 use winit::window::{Window};
 use vulkanalia::{
     prelude::v1_0::*
@@ -13,7 +10,11 @@ use vulkanalia::{
 
 use crate::{
     app_data::{AppData},
-    shader_input::static_screen_space::{Vertex, VERTICES}
+    shader_input::{
+        simple::{Vertex, VERTICES},
+        uniform_buffer_object::UniformBufferObject
+    },
+    buffer::{Buffer}
 };
 
 #[derive(Debug, Default)]
@@ -49,49 +50,14 @@ impl BootstrapCommandBufferLoader {
         }
     }
 
-    fn get_memory_type_index(&self, app_data: &AppData, properties: vk::MemoryPropertyFlags, requirements: vk::MemoryRequirements) -> Result<u32> {
-        let memory = app_data.memory_properties;
-        (0..memory.memory_type_count)
-            .find(|i| {
-                let is_suitable = (requirements.memory_type_bits & (1 << i)) != 0;
-                let memory_type = memory.memory_types[*i as usize];
-                is_suitable && memory_type.property_flags.contains(properties)
-            })
-            .ok_or_else(|| anyhow!("Failed to find suitable memory type for buffer"))
-    }
-
     fn create_vertex_buffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
-        let buffer_info = vk::BufferCreateInfo::builder()
-            .size((size_of::<Vertex>() * VERTICES.len()) as u64)
-            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+        debug!("Creating vertex buffer...");
+        let mut buffer = Buffer::<Vertex>::new(vk::BufferUsageFlags::VERTEX_BUFFER, VERTICES.len());
 
-        let vertex_buffer: vk::Buffer;
-        let requirements: vk::MemoryRequirements;
-        unsafe {
-            debug!("Creating vertex buffer...");
-            vertex_buffer = device.create_buffer(&buffer_info, None)?;
-            requirements = device.get_buffer_memory_requirements(vertex_buffer);
-        }
-        app_data.vertex_buffer = Some(vertex_buffer);
+        buffer.create(device, app_data.memory_properties)?;
+        buffer.set_data(device, &*VERTICES)?;
 
-        let memory_type_index = self.get_memory_type_index(app_data, vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE, requirements)?;
-        let memory_info = vk::MemoryAllocateInfo::builder()
-            .allocation_size(requirements.size)
-            .memory_type_index(memory_type_index);
-
-        let vertex_buffer_memory: vk::DeviceMemory;
-        unsafe {
-            vertex_buffer_memory = device.allocate_memory(&memory_info, None)?;
-            device.bind_buffer_memory(vertex_buffer, vertex_buffer_memory, 0)?;
-        }
-        app_data.vertex_buffer_memory = Some(vertex_buffer_memory);
-
-        unsafe {
-            let memory = device.map_memory(vertex_buffer_memory, 0, buffer_info.size, vk::MemoryMapFlags::empty())?;
-            memcpy(VERTICES.as_ptr(), memory.cast(), VERTICES.len());
-            device.unmap_memory(vertex_buffer_memory);
-        }
+        app_data.vertex_buffer = Some(buffer);
 
         Ok(())
     }
@@ -99,17 +65,110 @@ impl BootstrapCommandBufferLoader {
     fn destroy_vertex_buffers(&self, device: &Device, app_data: &mut AppData) -> () {
         debug!("Destroying vertex buffer...");
 
-        if let Some(vertex_buffer) = app_data.vertex_buffer.take() {
+        if let Some(mut vertex_buffer) = app_data.vertex_buffer.take() {
+            vertex_buffer.destroy(device);
+        }
+    }
+
+    fn create_uniform_buffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+        debug!("Creating uniform buffers...");
+        let mut uniform_buffers = app_data.swapchain_images.iter()
+            .map(|_| {
+                Buffer::<UniformBufferObject>::new(vk::BufferUsageFlags::UNIFORM_BUFFER, 1)
+            })
+            .collect::<Vec<_>>();
+
+        for buffer in uniform_buffers.iter_mut() {
+            buffer.create(device, app_data.memory_properties)?;
+        }
+
+        app_data.uniform_buffers = uniform_buffers;
+        debug!("Uniform buffers created: {:?}", app_data.uniform_buffers);
+
+        Ok(())
+    }
+
+    fn destroy_uniform_buffers(&self, device: &Device, app_data: &mut AppData) -> () {
+        debug!("Destroying uniform buffers...");
+
+        for uniform_buffer in app_data.uniform_buffers.iter_mut() {
+            uniform_buffer.destroy(device);
+        }
+        app_data.uniform_buffers.clear();
+    }
+
+    fn create_descriptor_pool(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+        let max_sets = app_data.uniform_buffers.len() as u32;
+
+        let ubo_size = vk::DescriptorPoolSize::builder()
+            .type_(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(max_sets);
+
+        let pool_sizes = &[ubo_size];
+        let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
+            .pool_sizes(pool_sizes)
+            .max_sets(max_sets);
+
+        let descriptor_pool: vk::DescriptorPool;
+        unsafe {
+            debug!("Creating descriptor pool...");
+            descriptor_pool = device.create_descriptor_pool(&desc_pool_info, None)?;
+        }
+
+        app_data.descriptor_pool = Some(descriptor_pool);
+        debug!("Descriptor pool created: {:?}", app_data.descriptor_pool);
+
+        Ok(())
+    }
+
+    fn destroy_descriptor_pool(&self, device: &Device, app_data: &mut AppData) -> () {
+        if let Some(descriptor_pool) = app_data.descriptor_pool.take() {
+            debug!("Destroying descriptor pool...");
             unsafe {
-                device.destroy_buffer(vertex_buffer, None);
+                device.destroy_descriptor_pool(descriptor_pool, None);
+            }
+        }
+    }
+
+    fn create_descriptor_sets(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+        let desc_pool = app_data.descriptor_pool.unwrap();
+        let desc_set_layout = app_data.descriptor_set_layout.unwrap();
+
+        let layouts = vec![desc_set_layout; app_data.swapchain_images.len()];
+        let desc_set_info = vk::DescriptorSetAllocateInfo::builder()
+            .descriptor_pool(desc_pool)
+            .set_layouts(&layouts);
+
+        let desc_sets: Vec<vk::DescriptorSet>;
+        unsafe {
+            debug!("Allocating descriptor sets...");
+            desc_sets = device.allocate_descriptor_sets(&desc_set_info)?;
+        }
+
+        app_data.descriptor_sets = desc_sets;
+        debug!("Descriptor sets allocated: {:?}", app_data.descriptor_sets);
+
+        for (q, desc_set) in app_data.descriptor_sets.iter().enumerate() {
+            let buffer = unsafe { app_data.uniform_buffers[q].raw_buffer().unwrap() };
+            let info = vk::DescriptorBufferInfo::builder()
+                .buffer(buffer)
+                .offset(0)
+                .range(size_of::<UniformBufferObject>() as u64);
+
+            let buffer_info = &[info];
+            let ubo_write = vk::WriteDescriptorSet::builder()
+                .dst_set(*desc_set)
+                .dst_binding(0)
+                .dst_array_element(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(buffer_info);
+
+            unsafe {
+                device.update_descriptor_sets(&[ubo_write], &[] as &[vk::CopyDescriptorSet]);
             }
         }
 
-        if let Some(vertex_buffer_memory) = app_data.vertex_buffer_memory.take() {
-            unsafe {
-                device.free_memory(vertex_buffer_memory, None);
-            }
-        }
+        Ok(())
     }
 
     fn create_command_buffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
@@ -146,7 +205,7 @@ impl BootstrapCommandBufferLoader {
 
             let color_clear_value = vk::ClearValue {
                 color: vk::ClearColorValue {
-                    float32: [0.0, 0.0, 1.0, 1.0]
+                    float32: [0.0, 0.0, 0.0, 1.0]
                 }
             };
 
@@ -163,8 +222,9 @@ impl BootstrapCommandBufferLoader {
                 let pipeline = app_data.pipeline.unwrap();
                 device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
 
-                let vertex_buffer = app_data.vertex_buffer.unwrap();
+                let vertex_buffer = app_data.vertex_buffer.unwrap().raw_buffer().unwrap();
                 device.cmd_bind_vertex_buffers(*command_buffer, 0, &[vertex_buffer], &[0]);
+                device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, app_data.pipeline_layout.unwrap(), 0, &[app_data.descriptor_sets[q]], &[]);
                 device.cmd_draw(*command_buffer, VERTICES.len() as u32, 1, 0, 0);
 
                 device.cmd_end_render_pass(*command_buffer);
@@ -192,6 +252,9 @@ impl BootstrapLoader for BootstrapCommandBufferLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
         self.create_command_pool(device, app_data)?;
         self.create_vertex_buffers(device, app_data)?;
+        self.create_uniform_buffers(device, app_data)?;
+        self.create_descriptor_pool(device, app_data)?;
+        self.create_descriptor_sets(device, app_data)?;
         self.create_command_buffers(device, app_data)?;
 
         Ok(())
@@ -199,15 +262,22 @@ impl BootstrapLoader for BootstrapCommandBufferLoader {
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
         self.destroy_command_buffers(device, app_data);
+        self.destroy_descriptor_pool(device, app_data);
+        self.destroy_uniform_buffers(device, app_data);
         self.destroy_vertex_buffers(device, app_data);
         self.destroy_command_pool(device, app_data);
     }
 
     fn recreate_swapchain(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData, next: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>) -> Result<()> {
-        trace!("Recreating command buffers (but not command pool) in recreate_swapchain");
+        trace!("Recreating command buffers, descriptor pool, and uniform buffers (but not command pool or vertex buffers) in recreate_swapchain");
 
         self.destroy_command_buffers(device, app_data);
+        self.destroy_descriptor_pool(device, app_data);
+        self.destroy_uniform_buffers(device, app_data);
         next(inst, device, window, app_data)?;
+        self.create_uniform_buffers(device, app_data)?;
+        self.create_descriptor_pool(device, app_data)?;
+        self.create_descriptor_sets(device, app_data)?;
         self.create_command_buffers(device, app_data)?;
 
         Ok(())

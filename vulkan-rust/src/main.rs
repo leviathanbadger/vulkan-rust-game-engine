@@ -1,4 +1,6 @@
 mod bootstrap;
+mod buffer;
+mod game;
 mod shader_input;
 mod util;
 mod app;

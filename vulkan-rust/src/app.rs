@@ -1,14 +1,16 @@
 use std::{
     collections::{HashSet},
     ffi::{CStr},
-    time::{Instant},
+    time::{Instant, Duration},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering}
-    }
+    },
+    thread
 };
 use anyhow::{anyhow, Result};
 use thiserror::Error;
+use nalgebra_glm as glm;
 use winit::{
     dpi::{LogicalSize},
     window::{Window, WindowBuilder},
@@ -24,7 +26,12 @@ use vulkanalia::{
 
 use crate::{
     app_data::{AppData},
-    bootstrap::{BootstrapLoader, queue_family_indices::QueueFamilyIndices}
+    bootstrap::{
+        BootstrapLoader,
+        queue_family_indices::QueueFamilyIndices
+    },
+    shader_input::uniform_buffer_object::{UniformBufferObject},
+    game::camera::{Camera, HasCameraMatrix, ORIGIN}
 };
 
 #[derive(Debug, Error)]
@@ -42,6 +49,7 @@ pub struct App {
     pub inst: Instance,
     pub device: Device,
     pub bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>,
+    pub camera: Camera,
     frame: u32,
     start_time: Instant,
     destroying: bool,
@@ -93,6 +101,10 @@ impl App {
             loader.after_create_logical_device(&inst, &device, &window, &mut app_data)?;
         }
 
+        let mut camera = Camera::default();
+        camera.set_pos(glm::vec3(5.0, 3.0, 5.0));
+        camera.look_at(*ORIGIN);
+
         Ok(Self {
             event_loop: Some(event_loop),
             window,
@@ -101,6 +113,7 @@ impl App {
             inst,
             device,
             bootstrap_loaders: bootstrap_loaders,
+            camera,
             frame: 0,
             start_time: Instant::now(),
             destroying: false,
@@ -451,7 +464,9 @@ impl App {
             self.recreate_swapchain()?;
         }
 
-        //TODO: sleep until next frame
+        //TODO: figure out how to use screen refresh rate
+        //TODO: sleep until next frame, not just some arbitrary amount
+        thread::sleep(Duration::from_millis(10));
 
         Ok(())
     }
@@ -492,6 +507,8 @@ impl App {
 
         self.app_data.images_in_flight[image_index] = in_flight_fence;
 
+        self.update_uniform_buffer(image_index)?;
+
         let wait_semaphores = &[image_available];
         let signal_semaphores = &[render_finished];
         let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
@@ -531,6 +548,23 @@ impl App {
                 return Err(anyhow!(e))
             }
         }
+
+        Ok(())
+    }
+
+    fn update_uniform_buffer(&mut self, sync_frame: usize) -> Result<()> {
+        let extent = self.app_data.swapchain_extent.unwrap();
+        let view = self.camera.get_view_matrix()?;
+        let projection = self.camera.get_projection_matrix(extent)?;
+
+        let buffer = &mut self.app_data.uniform_buffers[sync_frame];
+        let ubo = UniformBufferObject {
+            proj: projection,
+            view: view,
+            frame_index: self.frame,
+            time_in_seconds: self.start_time.elapsed().as_secs_f32()
+        };
+        buffer.set_data(&self.device, &ubo)?;
 
         Ok(())
     }

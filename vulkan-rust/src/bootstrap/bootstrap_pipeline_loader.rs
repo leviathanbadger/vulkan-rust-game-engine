@@ -8,7 +8,7 @@ use vulkanalia::{
 
 use crate::{
     app_data::{AppData},
-    shader_input::static_screen_space::{Vertex}
+    shader_input::simple::{Vertex}
 };
 
 #[derive(Debug, Default)]
@@ -93,9 +93,39 @@ impl BootstrapPipelineLoader {
         }
     }
 
+    fn create_descriptor_set_layout(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+        let ubo_binding = vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS);
+
+        let bindings = &[ubo_binding];
+        let dsl_info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(bindings);
+
+        let dsl: vk::DescriptorSetLayout;
+        unsafe {
+            debug!("Creating descriptor set layout...");
+            dsl = device.create_descriptor_set_layout(&dsl_info, None)?;
+        }
+        app_data.descriptor_set_layout = Some(dsl);
+
+        Ok(())
+    }
+
+    fn destroy_descriptor_set_layout(&self, device: &Device, app_data: &mut AppData) -> () {
+        if let Some(dsl) = app_data.descriptor_set_layout.take() {
+            debug!("Destroying descriptor set layout...");
+            unsafe {
+                device.destroy_descriptor_set_layout(dsl, None);
+            }
+        }
+    }
+
     fn create_pipeline(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
-        let vert = include_bytes!("../../shaders/static_screen_space/shader.vert.spv");
-        let frag = include_bytes!("../../shaders/static_screen_space/shader.frag.spv");
+        let vert = include_bytes!("../../shaders/simple/shader.vert.spv");
+        let frag = include_bytes!("../../shaders/simple/shader.frag.spv");
 
         debug!("Creating vertex and fragment shader modules...");
         let vert_module = self.create_shader_module(device, &vert[..])?;
@@ -170,7 +200,10 @@ impl BootstrapPipelineLoader {
             .attachments(attachments)
             .blend_constants([0.0, 0.0, 0.0, 0.0]);
 
-        let layout_info = vk::PipelineLayoutCreateInfo::builder();
+        let desc_set_layout = app_data.descriptor_set_layout.unwrap();
+        let set_layouts = &[desc_set_layout];
+        let layout_info = vk::PipelineLayoutCreateInfo::builder()
+            .set_layouts(set_layouts);
         let pipeline_layout: vk::PipelineLayout;
         unsafe {
             debug!("Creating pipeline layout...");
@@ -233,6 +266,7 @@ impl BootstrapPipelineLoader {
 impl BootstrapLoader for BootstrapPipelineLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
         self.create_render_pass(device, app_data)?;
+        self.create_descriptor_set_layout(device, app_data)?;
         self.create_pipeline(device, app_data)?;
 
         Ok(())
@@ -240,6 +274,7 @@ impl BootstrapLoader for BootstrapPipelineLoader {
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
         self.destroy_pipeline(device, app_data);
+        self.destroy_descriptor_set_layout(device, app_data);
         self.destroy_render_pass(device, app_data);
     }
 }

@@ -1,3 +1,6 @@
+#![deprecated]
+#![allow(deprecated)]
+
 mod vertex;
 
 pub use vertex::{Vertex};

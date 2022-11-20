@@ -1,5 +1,3 @@
-#![deprecated]
-
 use std::mem::size_of;
 use nalgebra_glm as glm;
 use vulkanalia::{
@@ -9,13 +7,12 @@ use vulkanalia::{
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Vertex {
-    pos: glm::Vec2,
+    pos: glm::Vec3,
     color: glm::Vec3
 }
 
-#[allow(unused)]
 impl Vertex {
-    pub fn new(pos: glm::Vec2, color: glm::Vec3) -> Self {
+    pub fn new(pos: glm::Vec3, color: glm::Vec3) -> Self {
         Self {
             pos,
             color
@@ -34,7 +31,7 @@ impl Vertex {
         let pos = vk::VertexInputAttributeDescription::builder()
             .binding(0)
             .location(0)
-            .format(vk::Format::R32G32_SFLOAT)
+            .format(vk::Format::R32G32B32_SFLOAT)
             .offset(0)
             .build();
 
@@ -42,7 +39,7 @@ impl Vertex {
             .binding(0)
             .location(1)
             .format(vk::Format::R32G32B32_SFLOAT)
-            .offset(size_of::<glm::Vec2>() as u32)
+            .offset(size_of::<glm::Vec3>() as u32)
             .build();
 
         [pos, color]
