@@ -28,62 +28,68 @@ fn create_box(pos: glm::Vec3, size: glm::Vec3) -> Vec<Vertex> {
         Vertex::new(aaa, red),
         Vertex::new(aba, red),
         Vertex::new(aab, red),
-
-        Vertex::new(aba, dark(red)),
         Vertex::new(abb, dark(red)),
-        Vertex::new(aab, dark(red)),
 
         //+x
         Vertex::new(baa, red),
         Vertex::new(bab, red),
         Vertex::new(bba, red),
-
-        Vertex::new(bba, dark(red)),
-        Vertex::new(bab, dark(red)),
         Vertex::new(bbb, dark(red)),
 
         //-y
         Vertex::new(aaa, green),
         Vertex::new(aab, green),
         Vertex::new(baa, green),
-
-        Vertex::new(baa, dark(green)),
-        Vertex::new(aab, dark(green)),
         Vertex::new(bab, dark(green)),
 
         //+y
         Vertex::new(aba, green),
         Vertex::new(bba, green),
         Vertex::new(abb, green),
-
-        Vertex::new(bba, dark(green)),
         Vertex::new(bbb, dark(green)),
-        Vertex::new(abb, dark(green)),
 
         //-z
         Vertex::new(aaa, blue),
         Vertex::new(baa, blue),
         Vertex::new(aba, blue),
-
-        Vertex::new(baa, dark(blue)),
         Vertex::new(bba, dark(blue)),
-        Vertex::new(aba, dark(blue)),
 
         //+z
         Vertex::new(aab, blue),
         Vertex::new(abb, blue),
         Vertex::new(bab, blue),
-
-        Vertex::new(bab, dark(blue)),
-        Vertex::new(abb, dark(blue)),
         Vertex::new(bbb, dark(blue)),
     ]
 }
 
+fn create_box_indices() -> Vec<u16> {
+    vec![
+        //-x
+        0, 1, 2, 1, 3, 2,
+
+        //+x
+        4, 5, 6, 6, 5, 7,
+
+        //-y
+        8, 9, 10, 10, 9, 11,
+
+        //+y
+        12, 13, 14, 13, 15, 14,
+
+        //-z
+        16, 17, 18, 17, 19, 18,
+
+        //+z
+        20, 21, 22, 22, 21, 23
+    ]
+}
+
 lazy_static! {
-    pub static ref VERTICES: Vec<Vertex> = {
+    pub static ref CUBE_VERTICES: Vec<Vertex> = {
         let pos = glm::vec3(-1.0, -1.0, -1.0);
         let size = glm::vec3(2.0, 2.0, 2.0);
         create_box(pos, size)
     };
+
+    pub static ref CUBE_INDICES: Vec<u16> = create_box_indices();
 }

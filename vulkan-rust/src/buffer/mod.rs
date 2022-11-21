@@ -1,17 +1,18 @@
 mod into_buffer_data;
+mod model;
 
 use std::{
     mem::{size_of},
     ptr::{copy_nonoverlapping as memcpy},
     marker::{PhantomData}
 };
-
 use anyhow::{anyhow, Result};
 use vulkanalia::{
     prelude::v1_0::*
 };
 
 pub use into_buffer_data::{IntoBufferData};
+pub use model::{Model};
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Buffer<T> where T : Copy + Clone {
@@ -158,6 +159,7 @@ impl<T> Buffer<T> where T : Copy + Clone {
         Ok(())
     }
 
+    #[allow(unused)]
     pub fn submit(&self, device: &Device, command_pool: &vk::CommandPool, submit_queue: &vk::Queue) -> Result<()> {
         if !self.require_submit {
             warn!("Buffer submitted that doesn't require data to be submitted.");

@@ -31,9 +31,7 @@ use crate::{
         queue_family_indices::QueueFamilyIndices
     },
     shader_input::{
-        uniform_buffer_object::{UniformBufferObject},
-        push_constants::{PushConstants},
-        simple::VERTICES
+        uniform_buffer_object::{UniformBufferObject}
     },
     game::camera::{Camera, HasCameraMatrix, ORIGIN}
 };
@@ -620,20 +618,13 @@ impl App {
             self.device.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
 
             {
-                let vertex_buffer = self.app_data.vertex_buffer.unwrap().raw_buffer().unwrap();
-                self.device.cmd_bind_vertex_buffers(command_buffer, 0, &[vertex_buffer], &[0]);
-
                 let angle = self.start_time.elapsed().as_secs_f64() * glm::radians(&glm::vec1(90.0))[0];
                 let model = glm::rotate(&glm::identity(), angle, &glm::vec3(0.0f64, 1.0f64, 0.0f64));
                 let view = self.camera.get_view_matrix()?;
-                let viewmodel = view * model;
-                let push_constants = PushConstants {
-                    viewmodel: glm::convert::<glm::DMat4, glm::Mat4>(viewmodel)
-                };
-                let push_constants_bytes = push_constants.as_bytes();
-                self.device.cmd_push_constants(command_buffer, pipeline_layout, vk::ShaderStageFlags::ALL_GRAPHICS, 0, push_constants_bytes);
+                let viewmodel = glm::convert::<glm::DMat4, glm::Mat4>(view * model);
 
-                self.device.cmd_draw(command_buffer, VERTICES.len() as u32, 1, 0, 0);
+                let cube = self.app_data.cube_model.unwrap();
+                cube.write_render_to_command_buffer(&self.device, &command_buffer, &pipeline_layout, &viewmodel)?;
             }
 
             self.device.cmd_end_render_pass(command_buffer);

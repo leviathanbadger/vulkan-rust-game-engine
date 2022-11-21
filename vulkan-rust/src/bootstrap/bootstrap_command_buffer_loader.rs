@@ -8,9 +8,9 @@ use vulkanalia::{
 use crate::{
     app_data::{AppData},
     shader_input::{
-        simple::{Vertex, VERTICES}
+        simple::{Vertex, CUBE_VERTICES, CUBE_INDICES}
     },
-    buffer::{Buffer}
+    buffer::{Model}
 };
 
 #[derive(Debug, Default)]
@@ -63,24 +63,24 @@ impl BootstrapCommandBufferLoader {
         }
     }
 
-    fn create_vertex_buffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
-        debug!("Creating vertex buffer...");
-        let mut buffer = Buffer::<Vertex>::new(vk::BufferUsageFlags::VERTEX_BUFFER, VERTICES.len(), true);
+    fn create_cube_model(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+        debug!("Creating cube model...");
+        let mut model = Model::<Vertex>::new(CUBE_VERTICES.len(), CUBE_INDICES.len(), true)?;
 
-        buffer.create(device, app_data.memory_properties)?;
-        buffer.set_data(device, &*VERTICES)?;
-        buffer.submit(device, &app_data.transient_command_pool.unwrap(), &app_data.graphics_queue.unwrap())?;
+        model.create(device, app_data.memory_properties)?;
+        model.set_data(device, &*CUBE_VERTICES, &*CUBE_INDICES)?;
+        model.submit(device, &app_data.transient_command_pool.unwrap(), &app_data.graphics_queue.unwrap())?;
 
-        app_data.vertex_buffer = Some(buffer);
+        app_data.cube_model = Some(model);
 
         Ok(())
     }
 
-    fn destroy_vertex_buffers(&self, device: &Device, app_data: &mut AppData) -> () {
-        debug!("Destroying vertex buffer...");
+    fn destroy_cube_model(&self, device: &Device, app_data: &mut AppData) -> () {
+        debug!("Destroying cube model...");
 
-        if let Some(mut vertex_buffer) = app_data.vertex_buffer.take() {
-            vertex_buffer.destroy(device);
+        if let Some(mut cube_model) = app_data.cube_model.take() {
+            cube_model.destroy(device);
         }
     }
 
@@ -118,7 +118,7 @@ impl BootstrapCommandBufferLoader {
 impl BootstrapLoader for BootstrapCommandBufferLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
         self.create_command_pools(device, app_data)?;
-        self.create_vertex_buffers(device, app_data)?;
+        self.create_cube_model(device, app_data)?;
         self.create_command_buffers(device, app_data)?;
 
         Ok(())
@@ -126,12 +126,12 @@ impl BootstrapLoader for BootstrapCommandBufferLoader {
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
         self.destroy_command_buffers(device, app_data);
-        self.destroy_vertex_buffers(device, app_data);
+        self.destroy_cube_model(device, app_data);
         self.destroy_command_pools(device, app_data);
     }
 
     fn recreate_swapchain(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData, next: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>) -> Result<()> {
-        trace!("Recreating command buffers (but not command pool or vertex buffers) in recreate_swapchain");
+        trace!("Recreating command buffers (but not command pool or cube model) in recreate_swapchain");
 
         self.destroy_command_buffers(device, app_data);
         next(inst, device, window, app_data)?;

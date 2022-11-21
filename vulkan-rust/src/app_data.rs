@@ -3,7 +3,7 @@ use vulkanalia::{
 };
 
 use crate::{
-    buffer::{Buffer},
+    buffer::{Buffer, Model},
     shader_input::{
         uniform_buffer_object::{UniformBufferObject},
         simple::{Vertex}
@@ -32,7 +32,7 @@ pub struct AppData {
     pub framebuffers: Vec<vk::Framebuffer>,
     pub command_pool: Option<vk::CommandPool>,
     pub transient_command_pool: Option<vk::CommandPool>,
-    pub vertex_buffer: Option<Buffer::<Vertex>>,
+    pub cube_model: Option<Model<Vertex>>,
     pub uniform_buffers: Vec<Buffer::<UniformBufferObject>>,
     pub descriptor_pool: Option<vk::DescriptorPool>,
     pub descriptor_sets: Vec<vk::DescriptorSet>,
@@ -69,7 +69,7 @@ impl Default for AppData {
             framebuffers: Default::default(),
             command_pool: Default::default(),
             transient_command_pool: Default::default(),
-            vertex_buffer: Default::default(),
+            cube_model: Default::default(),
             uniform_buffers: Default::default(),
             descriptor_pool: Default::default(),
             descriptor_sets: Default::default(),
