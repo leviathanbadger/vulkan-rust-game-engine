@@ -5,6 +5,7 @@ use crate::{
     bootstrap::{
         BootstrapLoader,
         bootstrap_command_buffer_loader::BootstrapCommandBufferLoader,
+        bootstrap_depth_buffer_loader::BootstrapDepthBufferLoader,
         bootstrap_framebuffer_loader::BootstrapFramebufferLoader,
         bootstrap_pipeline_loader::BootstrapPipelineLoader,
         bootstrap_swapchain_loader::BootstrapSwapchainLoader,
@@ -56,6 +57,7 @@ impl AppBuilder {
     pub fn add_default_bootstrap_loaders(self) -> Self {
         self.add_bootstrap_loader(Box::new(BootstrapSwapchainLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapUniformLoader::new()))
+            .add_bootstrap_loader(Box::new(BootstrapDepthBufferLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapPipelineLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapFramebufferLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapCommandBufferLoader::new()))

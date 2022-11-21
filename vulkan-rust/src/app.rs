@@ -596,10 +596,16 @@ impl App {
                 float32: [0.0, 0.0, 0.0, 1.0]
             }
         };
+        let depth_clear_value = vk::ClearValue {
+            depth_stencil: vk::ClearDepthStencilValue {
+                depth: 1.0,
+                stencil: 0
+            }
+        };
 
         let render_pass = self.app_data.render_pass.unwrap();
         let framebuffer = self.app_data.framebuffers[image_index];
-        let clear_values = &[color_clear_value];
+        let clear_values = &[color_clear_value, depth_clear_value];
         let render_pass_info = vk::RenderPassBeginInfo::builder()
             .render_pass(render_pass)
             .framebuffer(framebuffer)

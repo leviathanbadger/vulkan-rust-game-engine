@@ -7,7 +7,8 @@ use crate::{
     shader_input::{
         uniform_buffer_object::{UniformBufferObject},
         simple::{Vertex}
-    }
+    },
+    bootstrap::bootstrap_depth_buffer_loader::{DepthBufferInfo}
 };
 
 #[derive(Debug)]
@@ -25,6 +26,9 @@ pub struct AppData {
     pub swapchain: Option<vk::SwapchainKHR>,
     pub swapchain_images: Vec<vk::Image>,
     pub swapchain_image_views: Vec<vk::ImageView>,
+
+    pub depth_buffer: Option<DepthBufferInfo>,
+
     pub render_pass: Option<vk::RenderPass>,
     pub descriptor_set_layout: Option<vk::DescriptorSetLayout>,
     pub pipeline_layout: Option<vk::PipelineLayout>,
@@ -62,6 +66,9 @@ impl Default for AppData {
             swapchain: Default::default(),
             swapchain_images: Default::default(),
             swapchain_image_views: Default::default(),
+
+            depth_buffer: Default::default(),
+
             render_pass: Default::default(),
             descriptor_set_layout: Default::default(),
             pipeline_layout: Default::default(),

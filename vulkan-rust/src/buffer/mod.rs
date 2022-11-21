@@ -1,3 +1,4 @@
+mod image2d;
 mod into_buffer_data;
 mod model;
 
@@ -11,6 +12,7 @@ use vulkanalia::{
     prelude::v1_0::*
 };
 
+pub use image2d::{Image2D};
 pub use into_buffer_data::{IntoBufferData};
 pub use model::{Model};
 
@@ -29,6 +31,16 @@ pub struct Buffer<T> where T : Copy + Clone {
     phantom: PhantomData<T>
 }
 
+pub fn get_memory_type_index(memory: vk::PhysicalDeviceMemoryProperties, properties: vk::MemoryPropertyFlags, requirements: vk::MemoryRequirements) -> Result<u32> {
+    (0..memory.memory_type_count)
+        .find(|i| {
+            let is_suitable = (requirements.memory_type_bits & (1 << i)) != 0;
+            let memory_type = memory.memory_types[*i as usize];
+            is_suitable && memory_type.property_flags.contains(properties)
+        })
+        .ok_or_else(|| anyhow!("Failed to find suitable memory type for buffer"))
+}
+
 impl<T> Buffer<T> where T : Copy + Clone {
     pub fn new(usage: vk::BufferUsageFlags, max_element_count: usize, require_submit: bool) -> Self {
         Self {
@@ -44,16 +56,6 @@ impl<T> Buffer<T> where T : Copy + Clone {
 
             phantom: PhantomData
         }
-    }
-
-    fn get_memory_type_index(&self, memory: vk::PhysicalDeviceMemoryProperties, properties: vk::MemoryPropertyFlags, requirements: vk::MemoryRequirements) -> Result<u32> {
-        (0..memory.memory_type_count)
-            .find(|i| {
-                let is_suitable = (requirements.memory_type_bits & (1 << i)) != 0;
-                let memory_type = memory.memory_types[*i as usize];
-                is_suitable && memory_type.property_flags.contains(properties)
-            })
-            .ok_or_else(|| anyhow!("Failed to find suitable memory type for buffer"))
     }
 
     fn allocated_buffer_size(&self) -> u64 {
@@ -96,7 +98,7 @@ impl<T> Buffer<T> where T : Copy + Clone {
             requirements = device.get_buffer_memory_requirements(buff);
         }
 
-        let memory_type_index = self.get_memory_type_index(memory, memory_flags, requirements)?;
+        let memory_type_index = get_memory_type_index(memory, memory_flags, requirements)?;
         let memory_info = vk::MemoryAllocateInfo::builder()
             .allocation_size(requirements.size)
             .memory_type_index(memory_type_index);

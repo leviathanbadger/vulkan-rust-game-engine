@@ -1,4 +1,5 @@
 pub mod bootstrap_command_buffer_loader;
+pub mod bootstrap_depth_buffer_loader;
 pub mod bootstrap_framebuffer_loader;
 pub mod bootstrap_pipeline_loader;
 pub mod bootstrap_swapchain_loader;
