@@ -14,6 +14,11 @@ use crate::{
 const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
 
 #[derive(Debug, Default)]
+pub struct ValidationInfo {
+    pub messenger: vk::DebugUtilsMessengerEXT
+}
+
+#[derive(Debug, Default)]
 pub struct BootstrapValidationLoader { }
 
 impl BootstrapValidationLoader {
@@ -69,18 +74,21 @@ impl BootstrapLoader for BootstrapValidationLoader {
         let inst = next(inst_info.push_next(&mut debug_info), app_data)?;
 
         debug!("Creating Vulkan debug utils messenger. Future validation/error/diagnostics from Vulkan will be logged.");
+        let messenger: vk::DebugUtilsMessengerEXT;
         unsafe {
-            app_data.messenger = Some(inst.create_debug_utils_messenger_ext(&debug_info, None)?);
+            messenger = inst.create_debug_utils_messenger_ext(&debug_info, None)?;
         }
+
+        app_data.validation = Some(ValidationInfo { messenger });
 
         Ok(inst)
     }
 
     fn before_destroy_instance(&self, inst: &Instance, app_data: &mut AppData) -> () {
-        if let Some(messenger) = app_data.messenger.take() {
+        if let Some(validation) = app_data.validation.take() {
             debug!("Destroying Vulkan debug utils messenger. Additional Vulkan messages may not be logged");
             unsafe {
-                inst.destroy_debug_utils_messenger_ext(messenger, None);
+                inst.destroy_debug_utils_messenger_ext(validation.messenger, None);
             }
         }
     }

@@ -11,6 +11,11 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
+pub struct FramebufferInfo {
+    pub framebuffers: Vec<vk::Framebuffer>
+}
+
+#[derive(Debug, Default)]
 pub struct BootstrapFramebufferLoader { }
 
 impl BootstrapFramebufferLoader {
@@ -46,20 +51,21 @@ impl BootstrapFramebufferLoader {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        app_data.framebuffers = framebuffers;
-        debug!("Framebuffers created: {:?}", app_data.framebuffers);
+        debug!("Framebuffers created: {:?}", framebuffers);
+        app_data.framebuffer = Some(FramebufferInfo { framebuffers });
 
         Ok(())
     }
 
     fn destroy_framebuffers(&self, device: &Device, app_data: &mut AppData) -> () {
-        debug!("Destroying framebuffers...");
-        unsafe {
-            for framebuffer in app_data.framebuffers.iter() {
-                device.destroy_framebuffer(*framebuffer, None);
+        if let Some(framebuffer_info) = app_data.framebuffer.take() {
+            debug!("Destroying framebuffers...");
+            unsafe {
+                for framebuffer in framebuffer_info.framebuffers.iter() {
+                    device.destroy_framebuffer(*framebuffer, None);
+                }
             }
         }
-        app_data.framebuffers.clear();
     }
 }
 

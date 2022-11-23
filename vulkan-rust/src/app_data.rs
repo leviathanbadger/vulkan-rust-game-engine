@@ -5,12 +5,14 @@ use vulkanalia::{
 
 use crate::{
     bootstrap::{
+        bootstrap_validation_loader::{ValidationInfo},
         bootstrap_swapchain_loader::{SwapchainInfo},
         bootstrap_uniform_loader::{UniformsInfo},
         bootstrap_depth_buffer_loader::{DepthBufferInfo},
         bootstrap_pipeline_loader::{PipelineInfo},
+        bootstrap_framebuffer_loader::{FramebufferInfo},
         bootstrap_command_buffer_loader::{CommandPoolsInfo},
-        bootstrap_sync_objects_loader::SyncObjectsInfo
+        bootstrap_sync_objects_loader::{SyncObjectsInfo}
     }
 };
 
@@ -29,12 +31,12 @@ pub struct AppData {
     pub queue_info: Option<Arc<VulkanQueueInfo>>,
     pub surface: Option<vk::SurfaceKHR>,
 
-    pub messenger: Option<vk::DebugUtilsMessengerEXT>,
+    pub validation: Option<ValidationInfo>,
     pub swapchain: Option<SwapchainInfo>,
     pub uniforms: Option<UniformsInfo>,
     pub depth_buffer: Option<DepthBufferInfo>,
     pub pipeline: Option<PipelineInfo>,
-    pub framebuffers: Vec<vk::Framebuffer>,
+    pub framebuffer: Option<FramebufferInfo>,
     pub command_pools: Option<CommandPoolsInfo>,
     pub sync_objects: Option<SyncObjectsInfo>
 }
