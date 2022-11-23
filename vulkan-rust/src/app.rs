@@ -63,7 +63,6 @@ impl App {
     pub fn create(initial_title: &'static str, default_size: LogicalSize<i32>, bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>) -> Result<Self> {
         debug!("Creating window and window event loop...");
         let event_loop = EventLoop::new();
-        //TODO: add support for fullscreen
         let window = WindowBuilder::new()
             .with_title(initial_title)
             .with_inner_size(default_size)
@@ -469,7 +468,6 @@ impl App {
             self.recreate_swapchain()?;
         }
 
-        //TODO: figure out how to use screen refresh rate
         //TODO: sleep until next frame, not just some arbitrary amount
         thread::sleep(Duration::from_millis(10));
 
@@ -663,3 +661,24 @@ impl App {
         }
     }
 }
+
+//TODO: move the cube model into a scene abstraction
+//TODO: finish refactoring AppData. Maybe change the abstraction completely for some objects
+//TODO: add support for loading and using textures in shaders
+//TODO: add support for loading models from OBJ files (rather than hardcoded in-app)
+//TODO: deprecate static_screen_space shader, or update it to use screen coordinates and support textures/ETC
+//TODO: add asynchronous loading of assets; move asset loading onto other threads (placeholder models/textures if things don't load fast enough)
+//TODO: single location for GPU memory management (allocation/freeing)
+//TODO: create game object abstraction
+//TODO: add support for keyboard/mouse input
+//TODO: render at a lower resolution than the swapchain-created images
+//TODO: determine per-pixel motion vector for use in DLSS2/FSR2/motion blur
+//TODO: attach motion vector image to framebuffer for use in DLSS2/FSR2/motion blur
+//TODO: add support for DLSS2
+//TODO: add support for FSR2
+//TODO: add support for fullscreen
+//TODO: figure out how to use screen refresh rate
+//TODO: find and integrate 3D physics engine
+//TODO: support rendering text
+//TODO: look into ray tracing
+//TODO: add support for light sources in shaders
