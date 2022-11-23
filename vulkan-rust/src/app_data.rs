@@ -9,8 +9,9 @@ use crate::{
     },
     bootstrap::{
         bootstrap_swapchain_loader::{SwapchainInfo},
+        bootstrap_uniform_loader::{UniformsInfo},
         bootstrap_depth_buffer_loader::{DepthBufferInfo},
-        bootstrap_uniform_loader::{UniformsInfo}
+        bootstrap_pipeline_loader::{PipelineInfo}
     }
 };
 
@@ -28,10 +29,8 @@ pub struct AppData {
     pub swapchain: Option<SwapchainInfo>,
     pub uniforms: Option<UniformsInfo>,
     pub depth_buffer: Option<DepthBufferInfo>,
+    pub pipeline: Option<PipelineInfo>,
 
-    pub render_pass: Option<vk::RenderPass>,
-    pub pipeline_layout: Option<vk::PipelineLayout>,
-    pub pipeline: Option<vk::Pipeline>,
     pub framebuffers: Vec<vk::Framebuffer>,
     pub command_pool: Option<vk::CommandPool>,
     pub transient_command_pool: Option<vk::CommandPool>,
@@ -61,10 +60,8 @@ impl Default for AppData {
             swapchain: Default::default(),
             uniforms: Default::default(),
             depth_buffer: Default::default(),
-
-            render_pass: Default::default(),
-            pipeline_layout: Default::default(),
             pipeline: Default::default(),
+
             framebuffers: Default::default(),
             command_pool: Default::default(),
             transient_command_pool: Default::default(),

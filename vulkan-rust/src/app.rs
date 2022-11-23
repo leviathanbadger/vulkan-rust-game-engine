@@ -603,7 +603,8 @@ impl App {
             }
         };
 
-        let render_pass = self.app_data.render_pass.unwrap();
+        let pipeline_info = &self.app_data.pipeline.as_ref().unwrap();
+        let render_pass = pipeline_info.render_pass;
         let framebuffer = self.app_data.framebuffers[image_index];
         let clear_values = &[color_clear_value, depth_clear_value];
         let render_pass_info = vk::RenderPassBeginInfo::builder()
@@ -612,8 +613,8 @@ impl App {
             .render_area(render_area)
             .clear_values(clear_values);
 
-        let pipeline = self.app_data.pipeline.unwrap();
-        let pipeline_layout = self.app_data.pipeline_layout.unwrap();
+        let pipeline = pipeline_info.pipeline;
+        let pipeline_layout = pipeline_info.layout;
         let descriptor_set = self.app_data.uniforms.as_ref().unwrap().descriptor_sets[image_index];
 
         unsafe {

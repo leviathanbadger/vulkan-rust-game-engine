@@ -16,6 +16,13 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
+pub struct PipelineInfo {
+    pub render_pass: vk::RenderPass,
+    pub layout: vk::PipelineLayout,
+    pub pipeline: vk::Pipeline
+}
+
+#[derive(Debug, Default)]
 pub struct BootstrapPipelineLoader { }
 
 impl BootstrapPipelineLoader {
@@ -41,7 +48,7 @@ impl BootstrapPipelineLoader {
         }
     }
 
-    fn create_render_pass(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+    fn create_render_pass(&self, device: &Device, pipeline_info: &mut PipelineInfo, app_data: &AppData) -> Result<()> {
         let swapchain_format = app_data.swapchain.as_ref().unwrap().surface_format.format;
 
         let color_attachment = vk::AttachmentDescription::builder()
@@ -102,21 +109,20 @@ impl BootstrapPipelineLoader {
             render_pass = device.create_render_pass(&render_pass_info, None)?;
             debug!("Render pass created: {:?}", render_pass);
         }
-        app_data.render_pass = Some(render_pass);
+        pipeline_info.render_pass = render_pass;
 
         Ok(())
     }
 
-    fn destroy_render_pass(&self, device: &Device, app_data: &mut AppData) -> () {
-        if let Some(render_pass) = app_data.render_pass.take() {
-            debug!("Destroying render pass...");
-            unsafe {
-                device.destroy_render_pass(render_pass, None);
-            }
+    fn destroy_render_pass(&self, device: &Device, pipeline_info: &mut PipelineInfo) -> () {
+        debug!("Destroying render pass...");
+        unsafe {
+            device.destroy_render_pass(pipeline_info.render_pass, None);
         }
+        pipeline_info.render_pass = vk::RenderPass::null();
     }
 
-    fn create_pipeline(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+    fn create_pipeline(&self, device: &Device, pipeline_info: &mut PipelineInfo, app_data: &AppData) -> Result<()> {
         let vert = include_bytes!("../../shaders/simple/shader.vert.spv");
         let frag = include_bytes!("../../shaders/simple/shader.frag.spv");
 
@@ -220,12 +226,12 @@ impl BootstrapPipelineLoader {
             pipeline_layout = device.create_pipeline_layout(&layout_info, None)?;
             debug!("Pipeline layout created: {:?}", pipeline_layout);
         }
-        app_data.pipeline_layout = Some(pipeline_layout);
+        pipeline_info.layout = pipeline_layout;
 
-        let render_pass = app_data.render_pass.unwrap();
+        let render_pass = pipeline_info.render_pass;
 
         let stages = &[vert_stage, frag_stage];
-        let pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
+        let pipeline_create_info = vk::GraphicsPipelineCreateInfo::builder()
             .stages(stages)
             .vertex_input_state(&vertex_input_state)
             .input_assembly_state(&input_assembly_state)
@@ -240,14 +246,14 @@ impl BootstrapPipelineLoader {
             .base_pipeline_handle(vk::Pipeline::null())
             .base_pipeline_index(-1);
 
-        let pipeline_infos = &[pipeline_info];
+        let pipeline_create_infos = &[pipeline_create_info];
         let pipeline: vk::Pipeline;
         unsafe {
             debug!("Creating pipeline...");
-            pipeline = device.create_graphics_pipelines(vk::PipelineCache::null(), pipeline_infos, None)?.0;
+            pipeline = device.create_graphics_pipelines(vk::PipelineCache::null(), pipeline_create_infos, None)?.0;
             debug!("Pipeline created: {:?}", pipeline);
         }
-        app_data.pipeline = Some(pipeline);
+        pipeline_info.pipeline = pipeline;
 
         unsafe {
             device.destroy_shader_module(vert_module, None);
@@ -257,33 +263,35 @@ impl BootstrapPipelineLoader {
         Ok(())
     }
 
-    fn destroy_pipeline(&self, device: &Device, app_data: &mut AppData) -> () {
-        if let Some(pipeline) = app_data.pipeline.take() {
-            debug!("Destroying pipeline...");
-            unsafe {
-                device.destroy_pipeline(pipeline, None);
-            }
+    fn destroy_pipeline(&self, device: &Device, pipeline_info: &mut PipelineInfo) -> () {
+        debug!("Destroying pipeline...");
+        unsafe {
+            device.destroy_pipeline(pipeline_info.pipeline, None);
         }
+        pipeline_info.pipeline = vk::Pipeline::null();
 
-        if let Some(pipeline_layout) = app_data.pipeline_layout.take() {
-            debug!("Destroying pipeline layout...");
-            unsafe {
-                device.destroy_pipeline_layout(pipeline_layout, None);
-            }
+        debug!("Destroying pipeline layout...");
+        unsafe {
+            device.destroy_pipeline_layout(pipeline_info.layout, None);
         }
+        pipeline_info.layout = vk::PipelineLayout::null();
     }
 }
 
 impl BootstrapLoader for BootstrapPipelineLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
-        self.create_render_pass(device, app_data)?;
-        self.create_pipeline(device, app_data)?;
+        let mut pipeline_info = PipelineInfo::default();
+        self.create_render_pass(device, &mut pipeline_info, app_data)?;
+        self.create_pipeline(device, &mut pipeline_info, app_data)?;
+        app_data.pipeline = Some(pipeline_info);
 
         Ok(())
     }
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
-        self.destroy_pipeline(device, app_data);
-        self.destroy_render_pass(device, app_data);
+        if let Some(mut pipeline_info) = app_data.pipeline.take() {
+            self.destroy_pipeline(device, &mut pipeline_info);
+            self.destroy_render_pass(device, &mut pipeline_info);
+        }
     }
 }

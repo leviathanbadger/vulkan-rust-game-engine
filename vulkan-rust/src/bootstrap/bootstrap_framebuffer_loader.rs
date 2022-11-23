@@ -20,6 +20,7 @@ impl BootstrapFramebufferLoader {
 
     fn create_framebuffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
         let swapchain_info = app_data.swapchain.as_ref().unwrap();
+        let pipeline_info = app_data.pipeline.as_ref().unwrap();
         let image_count = swapchain_info.image_count;
         let swapchain_extent = swapchain_info.extent;
 
@@ -33,7 +34,7 @@ impl BootstrapFramebufferLoader {
                 let attachments = &[swapchain_image_view, depth_image_view];
                 let extent = swapchain_extent;
                 let framebuffer_info = vk::FramebufferCreateInfo::builder()
-                    .render_pass(app_data.render_pass.unwrap())
+                    .render_pass(pipeline_info.render_pass)
                     .attachments(attachments)
                     .width(extent.width)
                     .height(extent.height)
