@@ -20,7 +20,7 @@ pub struct SwapchainInfo {
     pub extent: vk::Extent2D,
     pub image_count: u32,
     pub swapchain: vk::SwapchainKHR,
-    pub images: Vec<Image2D>,
+    pub images: Vec<Image2D>
 }
 
 #[derive(Debug)]

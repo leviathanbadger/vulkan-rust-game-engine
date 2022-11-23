@@ -21,7 +21,7 @@ pub struct UniformsInfo {
     pub descriptor_set_layout: vk::DescriptorSetLayout,
     pub uniform_buffers: Vec<Buffer::<UniformBufferObject>>,
     pub descriptor_pool: vk::DescriptorPool,
-    pub descriptor_sets: Vec<vk::DescriptorSet>,
+    pub descriptor_sets: Vec<vk::DescriptorSet>
 }
 
 #[derive(Debug, Default)]

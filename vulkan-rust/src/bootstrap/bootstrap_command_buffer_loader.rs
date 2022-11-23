@@ -14,6 +14,15 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
+pub struct CommandPoolsInfo {
+    pub command_pool: vk::CommandPool,
+    pub cube_model: Option<Model<Vertex>>,
+
+    pub transient_command_pool: vk::CommandPool,
+    pub command_buffers: Vec<vk::CommandBuffer>
+}
+
+#[derive(Debug, Default)]
 pub struct BootstrapCommandBufferLoader { }
 
 impl BootstrapCommandBufferLoader {
@@ -33,59 +42,57 @@ impl BootstrapCommandBufferLoader {
         }
     }
 
-    fn create_command_pools(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+    fn create_command_pools(&self, device: &Device, command_pools_info: &mut CommandPoolsInfo, app_data: &AppData) -> Result<()> {
         debug!("Creating command pools...");
 
         let graphics_queue_family = app_data.graphics_queue_family.unwrap();
-        app_data.command_pool = Some(self.create_command_pool(device, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER, graphics_queue_family)?);
+        command_pools_info.command_pool = self.create_command_pool(device, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER, graphics_queue_family)?;
 
         let transfer_queue_family = graphics_queue_family; //TODO MAYBE: use separate queue for transient operations (memory transfer for example)
-        app_data.transient_command_pool = Some(self.create_command_pool(device, vk::CommandPoolCreateFlags::TRANSIENT, transfer_queue_family)?);
+        command_pools_info.transient_command_pool = self.create_command_pool(device, vk::CommandPoolCreateFlags::TRANSIENT, transfer_queue_family)?;
 
-        debug!("Command pools created. Standard: {:?}, transient: {:?}", app_data.command_pool.unwrap(), app_data.transient_command_pool.unwrap());
+        debug!("Command pools created. Standard: {:?}, transient: {:?}", command_pools_info.command_pool, command_pools_info.transient_command_pool);
 
         Ok(())
     }
 
-    fn destroy_command_pools(&self, device: &Device, app_data: &mut AppData) -> () {
+    fn destroy_command_pools(&self, device: &Device, command_pools_info: &mut CommandPoolsInfo) -> () {
         debug!("Destroying command pools...");
 
-        if let Some(command_pool) = app_data.command_pool.take() {
-            unsafe {
-                device.destroy_command_pool(command_pool, None);
-            }
+        unsafe {
+            device.destroy_command_pool(command_pools_info.command_pool, None);
         }
+        command_pools_info.command_pool = vk::CommandPool::null();
 
-        if let Some(command_pool) = app_data.transient_command_pool.take() {
-            unsafe {
-                device.destroy_command_pool(command_pool, None);
-            }
+        unsafe {
+            device.destroy_command_pool(command_pools_info.transient_command_pool, None);
         }
+        command_pools_info.transient_command_pool = vk::CommandPool::null();
     }
 
-    fn create_cube_model(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+    fn create_cube_model(&self, device: &Device, command_pools_info: &mut CommandPoolsInfo, app_data: &AppData) -> Result<()> {
         debug!("Creating cube model...");
         let mut model = Model::<Vertex>::new(CUBE_VERTICES.len(), CUBE_INDICES.len(), true)?;
 
         model.create(device, app_data.memory_properties)?;
         model.set_data(device, &*CUBE_VERTICES, &*CUBE_INDICES)?;
-        model.submit(device, &app_data.transient_command_pool.unwrap(), &app_data.graphics_queue.unwrap())?;
+        model.submit(device, &command_pools_info.transient_command_pool, &app_data.graphics_queue.unwrap())?;
 
-        app_data.cube_model = Some(model);
+        command_pools_info.cube_model = Some(model);
 
         Ok(())
     }
 
-    fn destroy_cube_model(&self, device: &Device, app_data: &mut AppData) -> () {
+    fn destroy_cube_model(&self, device: &Device, command_pools_info: &mut CommandPoolsInfo) -> () {
         debug!("Destroying cube model...");
 
-        if let Some(mut cube_model) = app_data.cube_model.take() {
+        if let Some(mut cube_model) = command_pools_info.cube_model.take() {
             cube_model.destroy(device);
         }
     }
 
-    fn create_command_buffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
-        let command_pool = app_data.command_pool.unwrap();
+    fn create_command_buffers(&self, device: &Device, command_pools_info: &mut CommandPoolsInfo, app_data: &AppData) -> Result<()> {
+        let command_pool = command_pools_info.command_pool;
         let count = app_data.swapchain.as_ref().unwrap().image_count;
         let command_buffer_info = vk::CommandBufferAllocateInfo::builder()
             .command_pool(command_pool)
@@ -98,44 +105,51 @@ impl BootstrapCommandBufferLoader {
             command_buffers = device.allocate_command_buffers(&command_buffer_info)?;
             debug!("Command buffers created: {:?}", command_buffers);
         }
-        app_data.command_buffers = command_buffers;
+        command_pools_info.command_buffers = command_buffers;
 
         Ok(())
     }
 
-    fn destroy_command_buffers(&self, device: &Device, app_data: &mut AppData) -> () {
-        if let Some(command_pool) = app_data.command_pool {
-            debug!("Destroying command buffers...");
-            let command_buffers = &app_data.command_buffers;
-            unsafe {
-                device.free_command_buffers(command_pool, &command_buffers[..]);
-            }
-            app_data.command_buffers.clear();
+    fn destroy_command_buffers(&self, device: &Device, command_pools_info: &mut CommandPoolsInfo) -> () {
+        debug!("Destroying command buffers...");
+        let command_buffers = &command_pools_info.command_buffers;
+        unsafe {
+            device.free_command_buffers(command_pools_info.command_pool, &command_buffers[..]);
         }
+        command_pools_info.command_buffers.clear();
     }
 }
 
 impl BootstrapLoader for BootstrapCommandBufferLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
-        self.create_command_pools(device, app_data)?;
-        self.create_cube_model(device, app_data)?;
-        self.create_command_buffers(device, app_data)?;
+        let mut command_pools_info = CommandPoolsInfo::default();
+        self.create_command_pools(device, &mut command_pools_info, app_data)?;
+        self.create_cube_model(device, &mut command_pools_info, app_data)?;
+        self.create_command_buffers(device, &mut command_pools_info, app_data)?;
+        app_data.command_pools = Some(command_pools_info);
 
         Ok(())
     }
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
-        self.destroy_command_buffers(device, app_data);
-        self.destroy_cube_model(device, app_data);
-        self.destroy_command_pools(device, app_data);
+
+        if let Some(mut command_pools_info) = app_data.command_pools.take() {
+            self.destroy_command_buffers(device, &mut command_pools_info);
+            self.destroy_cube_model(device, &mut command_pools_info);
+            self.destroy_command_pools(device, &mut command_pools_info);
+        }
     }
 
     fn recreate_swapchain(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData, next: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>) -> Result<()> {
         trace!("Recreating command buffers (but not command pool or cube model) in recreate_swapchain");
 
-        self.destroy_command_buffers(device, app_data);
+        let mut command_pools_info = app_data.command_pools.take().unwrap();
+
+        self.destroy_command_buffers(device, &mut command_pools_info);
         next(inst, device, window, app_data)?;
-        self.create_command_buffers(device, app_data)?;
+        self.create_command_buffers(device, &mut command_pools_info, app_data)?;
+
+        app_data.command_pools = Some(command_pools_info);
 
         Ok(())
     }

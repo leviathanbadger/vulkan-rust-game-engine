@@ -15,7 +15,7 @@ use crate::{
     }
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct PipelineInfo {
     pub render_pass: vk::RenderPass,
     pub layout: vk::PipelineLayout,

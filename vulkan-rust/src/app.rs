@@ -515,7 +515,7 @@ impl App {
         let wait_semaphores = &[image_available];
         let signal_semaphores = &[render_finished];
         let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        let command_buffer = self.app_data.command_buffers[image_index];
+        let command_buffer = self.app_data.command_pools.as_ref().unwrap().command_buffers[image_index];
         let command_buffers = &[command_buffer];
 
         let submit_info = vk::SubmitInfo::builder()
@@ -571,7 +571,7 @@ impl App {
     }
 
     fn update_command_buffer(&mut self, image_index: usize) -> Result<()> {
-        let command_buffer = self.app_data.command_buffers[image_index];
+        let command_buffer = self.app_data.command_pools.as_ref().unwrap().command_buffers[image_index];
         unsafe {
             self.device.reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
         }
@@ -630,7 +630,7 @@ impl App {
                 let view = self.camera.get_view_matrix()?;
                 let viewmodel = glm::convert::<glm::DMat4, glm::Mat4>(view * model);
 
-                let cube = self.app_data.cube_model.unwrap();
+                let cube = self.app_data.command_pools.as_ref().unwrap().cube_model.unwrap();
                 cube.write_render_to_command_buffer(&self.device, &command_buffer, &pipeline_layout, &viewmodel)?;
             }
 
