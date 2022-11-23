@@ -5,7 +5,10 @@ use vulkanalia::{
     prelude::v1_0::*
 };
 
-use crate::shader_input::push_constants::{PushConstants};
+use crate::{
+    shader_input::push_constants::{PushConstants},
+    bootstrap::bootstrap_command_buffer_loader::{CommandPoolsInfo}
+};
 
 pub trait CanBeIndexBufferType : Copy + Clone {
     fn get_index_type() -> vk::IndexType;
@@ -73,45 +76,15 @@ impl<TVert, TIndex> Model<TVert, TIndex> where TVert : Copy + Clone, TIndex : Ca
         Ok(())
     }
 
-    pub fn submit(&self, device: &Device, command_pool: &vk::CommandPool, submit_queue: &vk::Queue) -> Result<()> {
+    pub fn submit(&self, device: &Device, command_pools: &CommandPoolsInfo) -> Result<()> {
         if !self.require_submit {
             warn!("Model submitted that doesn't require data to be submitted.");
             return Ok(());
         }
 
-        let cmd_buff_info = vk::CommandBufferAllocateInfo::builder()
-            .level(vk::CommandBufferLevel::PRIMARY)
-            .command_pool(*command_pool)
-            .command_buffer_count(1);
-
-        let command_buffer: vk::CommandBuffer;
-        unsafe {
-            command_buffer = device.allocate_command_buffers(&cmd_buff_info)?[0];
-        }
-
-        let begin_info = vk::CommandBufferBeginInfo::builder()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-
-        unsafe {
-            device.begin_command_buffer(command_buffer, &begin_info)?;
-
-            self.write_submit_to_command_buffer(device, &command_buffer)?;
-
-            device.end_command_buffer(command_buffer)?;
-        }
-
-        let command_buffers = &[command_buffer];
-        let submit_info = vk::SubmitInfo::builder()
-            .command_buffers(command_buffers);
-
-        unsafe {
-            device.queue_submit(*submit_queue, &[submit_info], vk::Fence::null())?;
-            device.queue_wait_idle(*submit_queue)?;
-
-            device.free_command_buffers(*command_pool, command_buffers);
-        }
-
-        Ok(())
+        command_pools.submit_command_transient_sync(device, |command_buffer| {
+            self.write_submit_to_command_buffer(device, command_buffer)
+        })
     }
 
     pub fn write_submit_to_command_buffer(&self, device: &Device, command_buffer: &vk::CommandBuffer) -> Result<()> {
@@ -135,7 +108,7 @@ impl<TVert, TIndex> Model<TVert, TIndex> where TVert : Copy + Clone, TIndex : Ca
             let push_constants_bytes = push_constants.as_bytes();
             device.cmd_push_constants(*command_buffer, *pipeline_layout, vk::ShaderStageFlags::ALL_GRAPHICS, 0, push_constants_bytes);
 
-            device.cmd_draw_indexed(*command_buffer, self.index_buffer.curr_element_count as u32, 1, 0, 0, 0);
+            device.cmd_draw_indexed(*command_buffer, self.index_buffer.used_element_count() as u32, 1, 0, 0, 0);
         }
 
         Ok(())

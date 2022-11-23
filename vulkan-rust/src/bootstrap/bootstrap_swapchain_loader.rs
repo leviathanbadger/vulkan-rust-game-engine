@@ -123,8 +123,10 @@ impl BootstrapSwapchainLoader {
             image_count = swapchain_support.capabilities.max_image_count;
         }
 
-        let graphics_queue_index = app_data.graphics_queue_family.unwrap();
-        let present_queue_index = app_data.present_queue_family.unwrap();
+        let queue_info = &app_data.queue_info.as_ref().unwrap();
+        let graphics_queue_index = queue_info.graphics_queue_family;
+        let present_queue_index = queue_info.present_queue_family;
+
         let mut queue_family_indices = vec![];
         let mut image_sharing_mode = vk::SharingMode::EXCLUSIVE;
         if graphics_queue_index != present_queue_index {

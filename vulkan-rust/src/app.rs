@@ -25,7 +25,7 @@ use vulkanalia::{
 };
 
 use crate::{
-    app_data::{AppData},
+    app_data::{AppData, VulkanQueueInfo},
     bootstrap::{
         BootstrapLoader,
         queue_family_indices::QueueFamilyIndices
@@ -124,7 +124,7 @@ impl App {
         })
     }
 
-    unsafe fn create_instance<'a>(initial_title: &str, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, window: &Window, app_data: &mut AppData, entry: &Entry) -> Result<Instance> {
+    unsafe fn create_instance(initial_title: &str, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, window: &Window, app_data: &mut AppData, entry: &Entry) -> Result<Instance> {
         debug!("Selecting instance extensions and layers, and creating instance...");
         let mut zero_terminated: String = "".to_owned();
         zero_terminated.push_str(initial_title);
@@ -270,14 +270,14 @@ impl App {
         let physical_device = app_data.physical_device.unwrap();
         let indices = QueueFamilyIndices::get(&inst, app_data, physical_device)?;
 
-        let mut unique_queue_family_indices = HashSet::new();
-        let graphics_queue_index = indices.graphics.unwrap();
-        let present_queue_index = indices.present.unwrap();
-        unique_queue_family_indices.insert(graphics_queue_index);
-        unique_queue_family_indices.insert(present_queue_index);
+        let mut unique_queue_families = HashSet::new();
+        let graphics_queue_family = indices.graphics.unwrap();
+        let present_queue_family = indices.present.unwrap();
+        unique_queue_families.insert(graphics_queue_family);
+        unique_queue_families.insert(present_queue_family);
 
         let queue_priorities = &[1.0];
-        let queue_infos = unique_queue_family_indices
+        let queue_infos = unique_queue_families
             .iter()
             .map(|i| {
                 vk::DeviceQueueCreateInfo::builder()
@@ -304,15 +304,18 @@ impl App {
 
         let device = inst.create_device(physical_device, &device_info, None)?;
 
-        let graphics_queue = device.get_device_queue(graphics_queue_index, 0);
-        app_data.graphics_queue = Some(graphics_queue);
-        app_data.graphics_queue_family = Some(graphics_queue_index);
+        let graphics_queue = device.get_device_queue(graphics_queue_family, 0);
         debug!("Vulkan graphics queue handle: {}", graphics_queue.as_raw());
 
-        let present_queue = device.get_device_queue(present_queue_index, 0);
-        app_data.present_queue = Some(present_queue);
-        app_data.present_queue_family = Some(present_queue_index);
+        let present_queue = device.get_device_queue(present_queue_family, 0);
         debug!("Vulkan KHR present queue handle: {}", present_queue.as_raw());
+
+        app_data.queue_info = Some(Arc::new(VulkanQueueInfo {
+            graphics_queue,
+            graphics_queue_family,
+            present_queue,
+            present_queue_family
+        }));
 
         Ok(device)
     }
@@ -509,25 +512,22 @@ impl App {
         sync_objects_info.images_in_flight[image_index] = frame_sync.in_flight_fence;
 
         self.update_uniform_buffer(image_index)?;
-        self.update_command_buffer(image_index)?;
 
+        let command_pools_info = self.app_data.command_pools.as_ref();
+        let command_buffer = command_pools_info.unwrap().command_buffers[image_index];
         let wait_semaphores = &[frame_sync.image_available];
         let signal_semaphores = &[frame_sync.render_finished];
-        let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        let command_buffer = self.app_data.command_pools.as_ref().unwrap().command_buffers[image_index];
-        let command_buffers = &[command_buffer];
 
-        let submit_info = vk::SubmitInfo::builder()
-            .wait_semaphores(wait_semaphores)
-            .wait_dst_stage_mask(wait_stages)
-            .command_buffers(command_buffers)
-            .signal_semaphores(signal_semaphores);
-
-        let graphics_queue = self.app_data.graphics_queue.unwrap();
-        unsafe {
-            self.device.reset_fences(&[frame_sync.in_flight_fence])?;
-            self.device.queue_submit(graphics_queue, &[submit_info], frame_sync.in_flight_fence)?;
-        }
+        command_pools_info.unwrap().submit_command_async(
+            &self.device,
+            &command_buffer,
+            wait_semaphores,
+            &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
+            signal_semaphores,
+            &frame_sync.in_flight_fence,
+            |cb| {
+                self.update_command_buffer(image_index, cb)
+            })?;
 
         let swapchains = &[swapchain];
         let image_indices = &[image_index as u32];
@@ -536,7 +536,7 @@ impl App {
             .swapchains(swapchains)
             .image_indices(image_indices);
 
-        let present_queue = self.app_data.present_queue.unwrap();
+        let present_queue = self.app_data.queue_info.as_ref().unwrap().present_queue;
         unsafe {
             let result = self.device.queue_present_khr(present_queue, &present_info);
 
@@ -569,22 +569,7 @@ impl App {
         Ok(())
     }
 
-    fn update_command_buffer(&mut self, image_index: usize) -> Result<()> {
-        let command_buffer = self.app_data.command_pools.as_ref().unwrap().command_buffers[image_index];
-        unsafe {
-            self.device.reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
-        }
-
-        let inheritance = vk::CommandBufferInheritanceInfo::builder();
-
-        let begin_info = vk::CommandBufferBeginInfo::builder()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
-            .inheritance_info(&inheritance);
-
-        unsafe {
-            self.device.begin_command_buffer(command_buffer, &begin_info)?;
-        }
-
+    fn update_command_buffer(&self, image_index: usize, command_buffer: &vk::CommandBuffer) -> Result<()> {
         let extent = self.app_data.swapchain.as_ref().unwrap().extent;
         let render_area = vk::Rect2D::builder()
             .offset(vk::Offset2D::default())
@@ -617,11 +602,11 @@ impl App {
         let descriptor_set = self.app_data.uniforms.as_ref().unwrap().descriptor_sets[image_index];
 
         unsafe {
-            self.device.cmd_begin_render_pass(command_buffer, &render_pass_info, vk::SubpassContents::INLINE);
+            self.device.cmd_begin_render_pass(*command_buffer, &render_pass_info, vk::SubpassContents::INLINE);
 
-            self.device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
+            self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
 
-            self.device.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
+            self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
 
             {
                 let angle = self.start_time.elapsed().as_secs_f64() * glm::radians(&glm::vec1(90.0))[0];
@@ -630,12 +615,10 @@ impl App {
                 let viewmodel = glm::convert::<glm::DMat4, glm::Mat4>(view * model);
 
                 let cube = self.app_data.command_pools.as_ref().unwrap().cube_model.unwrap();
-                cube.write_render_to_command_buffer(&self.device, &command_buffer, &pipeline_layout, &viewmodel)?;
+                cube.write_render_to_command_buffer(&self.device, command_buffer, &pipeline_layout, &viewmodel)?;
             }
 
-            self.device.cmd_end_render_pass(command_buffer);
-
-            self.device.end_command_buffer(command_buffer)?;
+            self.device.cmd_end_render_pass(*command_buffer);
         }
 
         Ok(())

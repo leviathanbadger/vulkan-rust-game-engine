@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use vulkanalia::{
     prelude::v1_0::*
 };
@@ -13,17 +14,22 @@ use crate::{
     }
 };
 
+#[derive(Debug, Copy, Clone, Default)]
+pub struct VulkanQueueInfo {
+    pub graphics_queue: vk::Queue,
+    pub present_queue: vk::Queue,
+    pub graphics_queue_family: u32,
+    pub present_queue_family: u32
+}
+
 #[derive(Debug, Default)]
 pub struct AppData {
-    pub messenger: Option<vk::DebugUtilsMessengerEXT>,
     pub physical_device: Option<vk::PhysicalDevice>,
     pub memory_properties: vk::PhysicalDeviceMemoryProperties,
-    pub graphics_queue: Option<vk::Queue>,
-    pub present_queue: Option<vk::Queue>,
-    pub graphics_queue_family: Option<u32>,
-    pub present_queue_family: Option<u32>,
+    pub queue_info: Option<Arc<VulkanQueueInfo>>,
     pub surface: Option<vk::SurfaceKHR>,
 
+    pub messenger: Option<vk::DebugUtilsMessengerEXT>,
     pub swapchain: Option<SwapchainInfo>,
     pub uniforms: Option<UniformsInfo>,
     pub depth_buffer: Option<DepthBufferInfo>,

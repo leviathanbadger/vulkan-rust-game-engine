@@ -1,4 +1,5 @@
 use super::{BootstrapLoader};
+use std::sync::{Arc};
 use anyhow::{Result};
 use winit::window::{Window};
 use vulkanalia::{
@@ -6,20 +7,116 @@ use vulkanalia::{
 };
 
 use crate::{
-    app_data::{AppData},
+    app_data::{AppData, VulkanQueueInfo},
     shader_input::{
         simple::{Vertex, CUBE_VERTICES, CUBE_INDICES}
     },
     buffer::{Model}
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct CommandPoolsInfo {
+    queue_info: Arc<VulkanQueueInfo>,
+
     pub command_pool: vk::CommandPool,
     pub cube_model: Option<Model<Vertex>>,
 
     pub transient_command_pool: vk::CommandPool,
     pub command_buffers: Vec<vk::CommandBuffer>
+}
+
+impl CommandPoolsInfo {
+    pub fn new(queue_info: Arc<VulkanQueueInfo>) -> Self {
+        Self {
+            queue_info,
+
+            command_pool: Default::default(),
+            cube_model: Default::default(),
+            transient_command_pool: Default::default(),
+            command_buffers: Default::default()
+        }
+    }
+
+    fn submit_command_transient(&self, device: &Device, command_pool: &vk::CommandPool, submit_queue: &vk::Queue, command: impl FnOnce(&vk::CommandBuffer) -> Result<()>) -> Result<()> {
+        let cmd_buff_info = vk::CommandBufferAllocateInfo::builder()
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_pool(*command_pool)
+            .command_buffer_count(1);
+
+        let command_buffer: vk::CommandBuffer;
+        unsafe {
+            command_buffer = device.allocate_command_buffers(&cmd_buff_info)?[0];
+        }
+
+        let begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        unsafe {
+            device.begin_command_buffer(command_buffer, &begin_info)?;
+
+            command(&command_buffer)?;
+
+            device.end_command_buffer(command_buffer)?;
+        }
+
+        let command_buffers = &[command_buffer];
+        let submit_info = vk::SubmitInfo::builder()
+            .command_buffers(command_buffers);
+
+        unsafe {
+            device.queue_submit(*submit_queue, &[submit_info], vk::Fence::null())?;
+
+            device.queue_wait_idle(*submit_queue)?;
+
+            device.free_command_buffers(*command_pool, command_buffers);
+        }
+
+        Ok(())
+    }
+
+    pub fn submit_command_transient_sync(&self, device: &Device, command: impl FnOnce(&vk::CommandBuffer) -> Result<()>) -> Result<()> {
+        self.submit_command_transient(device, &self.transient_command_pool, &self.queue_info.graphics_queue, command)
+    }
+
+    fn submit_command_graphics(&self, device: &Device, command_buffer: &vk::CommandBuffer, submit_queue: &vk::Queue, wait_semaphores: &[vk::Semaphore], wait_dst_stage_mask: &[vk::PipelineStageFlags], signal_semaphores: &[vk::Semaphore], fence: &vk::Fence, command: impl FnOnce(&vk::CommandBuffer) -> Result<()>) -> Result<()> {
+        unsafe {
+            device.reset_command_buffer(*command_buffer, vk::CommandBufferResetFlags::empty())?;
+        }
+
+        let inheritance = vk::CommandBufferInheritanceInfo::builder();
+
+        let begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
+            .inheritance_info(&inheritance);
+
+        unsafe {
+            device.begin_command_buffer(*command_buffer, &begin_info)?;
+
+            command(command_buffer)?;
+
+            device.end_command_buffer(*command_buffer)?;
+        }
+
+        let command_buffers = &[*command_buffer];
+        let submit_info = vk::SubmitInfo::builder()
+            .command_buffers(command_buffers)
+            .wait_semaphores(wait_semaphores)
+            .wait_dst_stage_mask(wait_dst_stage_mask)
+            .signal_semaphores(signal_semaphores);
+
+        unsafe {
+            if !fence.is_null() {
+                device.reset_fences(&[*fence])?;
+            }
+            device.queue_submit(*submit_queue, &[submit_info], *fence)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn submit_command_async(&self, device: &Device, command_buffer: &vk::CommandBuffer, wait_semaphores: &[vk::Semaphore], wait_dst_stage_mask: &[vk::PipelineStageFlags], signal_semaphores: &[vk::Semaphore], fence: &vk::Fence, command: impl FnOnce(&vk::CommandBuffer) -> Result<()>) -> Result<()> {
+        self.submit_command_graphics(device, command_buffer, &self.queue_info.graphics_queue, wait_semaphores, wait_dst_stage_mask, signal_semaphores, fence, command)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -45,7 +142,9 @@ impl BootstrapCommandBufferLoader {
     fn create_command_pools(&self, device: &Device, command_pools_info: &mut CommandPoolsInfo, app_data: &AppData) -> Result<()> {
         debug!("Creating command pools...");
 
-        let graphics_queue_family = app_data.graphics_queue_family.unwrap();
+        let queue_info = app_data.queue_info.as_ref().unwrap();
+
+        let graphics_queue_family = queue_info.graphics_queue_family;
         command_pools_info.command_pool = self.create_command_pool(device, vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER, graphics_queue_family)?;
 
         let transfer_queue_family = graphics_queue_family; //TODO MAYBE: use separate queue for transient operations (memory transfer for example)
@@ -76,7 +175,7 @@ impl BootstrapCommandBufferLoader {
 
         model.create(device, app_data.memory_properties)?;
         model.set_data(device, &*CUBE_VERTICES, &*CUBE_INDICES)?;
-        model.submit(device, &command_pools_info.transient_command_pool, &app_data.graphics_queue.unwrap())?;
+        model.submit(device, &command_pools_info)?;
 
         command_pools_info.cube_model = Some(model);
 
@@ -122,7 +221,7 @@ impl BootstrapCommandBufferLoader {
 
 impl BootstrapLoader for BootstrapCommandBufferLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
-        let mut command_pools_info = CommandPoolsInfo::default();
+        let mut command_pools_info = CommandPoolsInfo::new(app_data.queue_info.as_ref().unwrap().clone());
         self.create_command_pools(device, &mut command_pools_info, app_data)?;
         self.create_cube_model(device, &mut command_pools_info, app_data)?;
         self.create_command_buffers(device, &mut command_pools_info, app_data)?;
