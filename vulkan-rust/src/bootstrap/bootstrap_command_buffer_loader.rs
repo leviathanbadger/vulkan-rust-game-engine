@@ -86,11 +86,11 @@ impl BootstrapCommandBufferLoader {
 
     fn create_command_buffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
         let command_pool = app_data.command_pool.unwrap();
-        let count = app_data.framebuffers.len();
+        let count = app_data.swapchain.as_ref().unwrap().image_count;
         let command_buffer_info = vk::CommandBufferAllocateInfo::builder()
             .command_pool(command_pool)
             .level(vk::CommandBufferLevel::PRIMARY)
-            .command_buffer_count(count as u32);
+            .command_buffer_count(count);
 
         let command_buffers: Vec<vk::CommandBuffer>;
         unsafe {

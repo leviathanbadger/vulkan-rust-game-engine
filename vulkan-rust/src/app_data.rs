@@ -3,14 +3,14 @@ use vulkanalia::{
 };
 
 use crate::{
-    buffer::{Buffer, Model},
+    buffer::{Model},
     shader_input::{
-        uniform_buffer_object::{UniformBufferObject},
         simple::{Vertex}
     },
     bootstrap::{
         bootstrap_swapchain_loader::{SwapchainInfo},
-        bootstrap_depth_buffer_loader::{DepthBufferInfo}
+        bootstrap_depth_buffer_loader::{DepthBufferInfo},
+        bootstrap_uniform_loader::{UniformsInfo}
     }
 };
 
@@ -26,19 +26,16 @@ pub struct AppData {
     pub surface: Option<vk::SurfaceKHR>,
 
     pub swapchain: Option<SwapchainInfo>,
+    pub uniforms: Option<UniformsInfo>,
     pub depth_buffer: Option<DepthBufferInfo>,
 
     pub render_pass: Option<vk::RenderPass>,
-    pub descriptor_set_layout: Option<vk::DescriptorSetLayout>,
     pub pipeline_layout: Option<vk::PipelineLayout>,
     pub pipeline: Option<vk::Pipeline>,
     pub framebuffers: Vec<vk::Framebuffer>,
     pub command_pool: Option<vk::CommandPool>,
     pub transient_command_pool: Option<vk::CommandPool>,
     pub cube_model: Option<Model<Vertex>>,
-    pub uniform_buffers: Vec<Buffer::<UniformBufferObject>>,
-    pub descriptor_pool: Option<vk::DescriptorPool>,
-    pub descriptor_sets: Vec<vk::DescriptorSet>,
     pub command_buffers: Vec<vk::CommandBuffer>,
     max_frames_in_flight: u32,
     pub image_available_semaphores: Vec<vk::Semaphore>,
@@ -62,19 +59,16 @@ impl Default for AppData {
             surface: Default::default(),
 
             swapchain: Default::default(),
+            uniforms: Default::default(),
             depth_buffer: Default::default(),
 
             render_pass: Default::default(),
-            descriptor_set_layout: Default::default(),
             pipeline_layout: Default::default(),
             pipeline: Default::default(),
             framebuffers: Default::default(),
             command_pool: Default::default(),
             transient_command_pool: Default::default(),
             cube_model: Default::default(),
-            uniform_buffers: Default::default(),
-            descriptor_pool: Default::default(),
-            descriptor_sets: Default::default(),
             command_buffers: Default::default(),
             image_available_semaphores: Default::default(),
             render_finished_semaphores: Default::default(),

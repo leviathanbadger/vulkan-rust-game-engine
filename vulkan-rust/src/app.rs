@@ -559,7 +559,7 @@ impl App {
         let extent = self.app_data.swapchain.as_ref().unwrap().extent;
         let projection = self.camera.get_projection_matrix(extent)?;
 
-        let buffer = &mut self.app_data.uniform_buffers[image_index];
+        let buffer = &mut self.app_data.uniforms.as_mut().unwrap().uniform_buffers[image_index];
         let ubo = UniformBufferObject {
             proj: projection,
             frame_index: self.frame,
@@ -614,7 +614,7 @@ impl App {
 
         let pipeline = self.app_data.pipeline.unwrap();
         let pipeline_layout = self.app_data.pipeline_layout.unwrap();
-        let descriptor_set = self.app_data.descriptor_sets[image_index];
+        let descriptor_set = self.app_data.uniforms.as_ref().unwrap().descriptor_sets[image_index];
 
         unsafe {
             self.device.cmd_begin_render_pass(command_buffer, &render_pass_info, vk::SubpassContents::INLINE);

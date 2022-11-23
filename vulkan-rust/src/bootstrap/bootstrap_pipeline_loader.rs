@@ -202,7 +202,7 @@ impl BootstrapPipelineLoader {
             .attachments(attachments)
             .blend_constants([0.0, 0.0, 0.0, 0.0]);
 
-        let desc_set_layout = app_data.descriptor_set_layout.unwrap();
+        let desc_set_layout = app_data.uniforms.as_ref().unwrap().descriptor_set_layout;
         let set_layouts = &[desc_set_layout];
 
         let vert_push_constant_range = vk::PushConstantRange::builder()

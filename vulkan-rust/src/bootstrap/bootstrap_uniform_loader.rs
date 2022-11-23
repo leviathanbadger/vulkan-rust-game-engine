@@ -17,6 +17,14 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
+pub struct UniformsInfo {
+    pub descriptor_set_layout: vk::DescriptorSetLayout,
+    pub uniform_buffers: Vec<Buffer::<UniformBufferObject>>,
+    pub descriptor_pool: vk::DescriptorPool,
+    pub descriptor_sets: Vec<vk::DescriptorSet>,
+}
+
+#[derive(Debug, Default)]
 pub struct BootstrapUniformLoader { }
 
 impl BootstrapUniformLoader {
@@ -24,7 +32,7 @@ impl BootstrapUniformLoader {
         Self::default()
     }
 
-    fn create_descriptor_set_layout(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+    fn create_descriptor_set_layout(&self, device: &Device, uniforms_info: &mut UniformsInfo) -> Result<()> {
         let ubo_binding = vk::DescriptorSetLayoutBinding::builder()
             .binding(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
@@ -40,21 +48,21 @@ impl BootstrapUniformLoader {
             debug!("Creating descriptor set layout...");
             dsl = device.create_descriptor_set_layout(&dsl_info, None)?;
         }
-        app_data.descriptor_set_layout = Some(dsl);
+
+        uniforms_info.descriptor_set_layout = dsl;
 
         Ok(())
     }
 
-    fn destroy_descriptor_set_layout(&self, device: &Device, app_data: &mut AppData) -> () {
-        if let Some(dsl) = app_data.descriptor_set_layout.take() {
-            debug!("Destroying descriptor set layout...");
-            unsafe {
-                device.destroy_descriptor_set_layout(dsl, None);
-            }
+    fn destroy_descriptor_set_layout(&self, device: &Device, uniforms_info: &mut UniformsInfo) -> () {
+        debug!("Destroying descriptor set layout...");
+        unsafe {
+            device.destroy_descriptor_set_layout(uniforms_info.descriptor_set_layout, None);
         }
+        uniforms_info.descriptor_set_layout = vk::DescriptorSetLayout::null();
     }
 
-    fn create_uniform_buffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+    fn create_uniform_buffers(&self, device: &Device, uniforms_info: &mut UniformsInfo, app_data: &AppData) -> Result<()> {
         debug!("Creating uniform buffers...");
         let image_count = app_data.swapchain.as_ref().unwrap().image_count;
         let mut uniform_buffers = (0..image_count)
@@ -67,23 +75,23 @@ impl BootstrapUniformLoader {
             buffer.create(device, app_data.memory_properties)?;
         }
 
-        app_data.uniform_buffers = uniform_buffers;
-        debug!("Uniform buffers created: {:?}", app_data.uniform_buffers);
+        debug!("Uniform buffers created: {:?}", uniform_buffers);
+        uniforms_info.uniform_buffers = uniform_buffers;
 
         Ok(())
     }
 
-    fn destroy_uniform_buffers(&self, device: &Device, app_data: &mut AppData) -> () {
+    fn destroy_uniform_buffers(&self, device: &Device, uniforms_info: &mut UniformsInfo) -> () {
         debug!("Destroying uniform buffers...");
 
-        for uniform_buffer in app_data.uniform_buffers.iter_mut() {
+        for uniform_buffer in uniforms_info.uniform_buffers.iter_mut() {
             uniform_buffer.destroy(device);
         }
-        app_data.uniform_buffers.clear();
+        uniforms_info.uniform_buffers.clear();
     }
 
-    fn create_descriptor_pool(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
-        let max_sets = app_data.uniform_buffers.len() as u32;
+    fn create_descriptor_pool(&self, device: &Device, uniforms_info: &mut UniformsInfo, app_data: &AppData) -> Result<()> {
+        let max_sets = app_data.swapchain.as_ref().unwrap().image_count;
 
         let ubo_size = vk::DescriptorPoolSize::builder()
             .type_(vk::DescriptorType::UNIFORM_BUFFER)
@@ -100,29 +108,26 @@ impl BootstrapUniformLoader {
             descriptor_pool = device.create_descriptor_pool(&desc_pool_info, None)?;
         }
 
-        app_data.descriptor_pool = Some(descriptor_pool);
-        debug!("Descriptor pool created: {:?}", app_data.descriptor_pool);
+        debug!("Descriptor pool created: {:?}", descriptor_pool);
+        uniforms_info.descriptor_pool = descriptor_pool;
 
         Ok(())
     }
 
-    fn destroy_descriptor_pool(&self, device: &Device, app_data: &mut AppData) -> () {
-        if let Some(descriptor_pool) = app_data.descriptor_pool.take() {
-            debug!("Destroying descriptor pool...");
-            unsafe {
-                device.destroy_descriptor_pool(descriptor_pool, None);
-            }
+    fn destroy_descriptor_pool(&self, device: &Device, uniforms_info: &mut UniformsInfo) -> () {
+        debug!("Destroying descriptor pool...");
+        unsafe {
+            device.destroy_descriptor_pool(uniforms_info.descriptor_pool, None);
         }
+        uniforms_info.descriptor_pool = vk::DescriptorPool::null();
     }
 
-    fn create_descriptor_sets(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
-        let desc_pool = app_data.descriptor_pool.unwrap();
-        let desc_set_layout = app_data.descriptor_set_layout.unwrap();
+    fn create_descriptor_sets(&self, device: &Device, uniforms_info: &mut UniformsInfo, app_data: &AppData) -> Result<()> {
         let image_count = app_data.swapchain.as_ref().unwrap().image_count as usize;
 
-        let layouts = vec![desc_set_layout; image_count];
+        let layouts = vec![uniforms_info.descriptor_set_layout; image_count];
         let desc_set_info = vk::DescriptorSetAllocateInfo::builder()
-            .descriptor_pool(desc_pool)
+            .descriptor_pool(uniforms_info.descriptor_pool)
             .set_layouts(&layouts);
 
         let desc_sets: Vec<vk::DescriptorSet>;
@@ -131,11 +136,8 @@ impl BootstrapUniformLoader {
             desc_sets = device.allocate_descriptor_sets(&desc_set_info)?;
         }
 
-        app_data.descriptor_sets = desc_sets;
-        debug!("Descriptor sets allocated: {:?}", app_data.descriptor_sets);
-
-        for (q, desc_set) in app_data.descriptor_sets.iter().enumerate() {
-            let buffer = unsafe { app_data.uniform_buffers[q].raw_buffer().unwrap() };
+        for (q, desc_set) in desc_sets.iter().enumerate() {
+            let buffer = unsafe { uniforms_info.uniform_buffers[q].raw_buffer().unwrap() };
             let info = vk::DescriptorBufferInfo::builder()
                 .buffer(buffer)
                 .offset(0)
@@ -154,35 +156,48 @@ impl BootstrapUniformLoader {
             }
         }
 
+        debug!("Descriptor sets allocated: {:?}", desc_sets);
+        uniforms_info.descriptor_sets = desc_sets;
+
         Ok(())
     }
 }
 
 impl BootstrapLoader for BootstrapUniformLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
-        self.create_descriptor_set_layout(device, app_data)?;
-        self.create_uniform_buffers(device, app_data)?;
-        self.create_descriptor_pool(device, app_data)?;
-        self.create_descriptor_sets(device, app_data)?;
+        let mut uniforms_info = UniformsInfo::default();
+        self.create_descriptor_set_layout(device, &mut uniforms_info)?;
+        self.create_uniform_buffers(device, &mut uniforms_info, app_data)?;
+        self.create_descriptor_pool(device, &mut uniforms_info, app_data)?;
+        self.create_descriptor_sets(device, &mut uniforms_info, app_data)?;
+        app_data.uniforms = Some(uniforms_info);
 
         Ok(())
     }
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
-        self.destroy_descriptor_pool(device, app_data);
-        self.destroy_uniform_buffers(device, app_data);
-        self.destroy_descriptor_set_layout(device, app_data);
+        if let Some(mut uniforms_info) = app_data.uniforms.take() {
+            uniforms_info.descriptor_sets.clear(); //No need to clean these up, apparently
+            self.destroy_descriptor_pool(device, &mut uniforms_info);
+            self.destroy_uniform_buffers(device, &mut uniforms_info);
+            self.destroy_descriptor_set_layout(device, &mut uniforms_info);
+        }
     }
 
     fn recreate_swapchain(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData, next: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>) -> Result<()> {
         trace!("Recreating descriptor sets, descriptor pool, and uniform buffers (but not descriptor set layout) in recreate_swapchain");
 
-        self.destroy_descriptor_pool(device, app_data);
-        self.destroy_uniform_buffers(device, app_data);
+        let mut uniforms_info = app_data.uniforms.take().unwrap();
+
+        uniforms_info.descriptor_sets.clear(); //No need to clean these up, apparently
+        self.destroy_descriptor_pool(device, &mut uniforms_info);
+        self.destroy_uniform_buffers(device, &mut uniforms_info);
         next(inst, device, window, app_data)?;
-        self.create_uniform_buffers(device, app_data)?;
-        self.create_descriptor_pool(device, app_data)?;
-        self.create_descriptor_sets(device, app_data)?;
+        self.create_uniform_buffers(device, &mut uniforms_info, app_data)?;
+        self.create_descriptor_pool(device, &mut uniforms_info, app_data)?;
+        self.create_descriptor_sets(device, &mut uniforms_info, app_data)?;
+
+        app_data.uniforms = Some(uniforms_info);
 
         Ok(())
     }
