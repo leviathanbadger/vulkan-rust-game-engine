@@ -132,7 +132,6 @@ impl BootstrapLoader for BootstrapCommandBufferLoader {
     }
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
-
         if let Some(mut command_pools_info) = app_data.command_pools.take() {
             self.destroy_command_buffers(device, &mut command_pools_info);
             self.destroy_cube_model(device, &mut command_pools_info);

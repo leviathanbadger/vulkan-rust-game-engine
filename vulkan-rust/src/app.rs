@@ -482,15 +482,14 @@ impl App {
         let swapchain = self.app_data.swapchain.as_ref().unwrap().swapchain;
 
         let sync_frame = (self.frame % self.app_data.max_frames_in_flight()) as usize;
-        let image_available = self.app_data.image_available_semaphores[sync_frame];
-        let render_finished = self.app_data.render_finished_semaphores[sync_frame];
-        let in_flight_fence = self.app_data.in_flight_fences[sync_frame];
+        let sync_objects_info = self.app_data.sync_objects.as_mut().unwrap();
+        let frame_sync = sync_objects_info.get_sync_objects(sync_frame)?;
 
         let image_index: usize;
         unsafe {
-            self.device.wait_for_fences(&[in_flight_fence], true, u64::MAX)?;
+            self.device.wait_for_fences(&[frame_sync.in_flight_fence], true, u64::MAX)?;
 
-            let result = self.device.acquire_next_image_khr(swapchain, u64::MAX, image_available, vk::Fence::null());
+            let result = self.device.acquire_next_image_khr(swapchain, u64::MAX, frame_sync.image_available, vk::Fence::null());
             match result {
                 Ok((idx, _)) => image_index = idx as usize,
                 Err(vk::ErrorCode::OUT_OF_DATE_KHR) => {
@@ -501,19 +500,19 @@ impl App {
                 Err(e) => return Err(anyhow!(e))
             }
 
-            let image_in_flight = self.app_data.images_in_flight[image_index];
+            let image_in_flight = sync_objects_info.images_in_flight[image_index];
             if !image_in_flight.is_null() {
                 self.device.wait_for_fences(&[image_in_flight], true, u64::MAX)?;
             }
         }
 
-        self.app_data.images_in_flight[image_index] = in_flight_fence;
+        sync_objects_info.images_in_flight[image_index] = frame_sync.in_flight_fence;
 
         self.update_uniform_buffer(image_index)?;
         self.update_command_buffer(image_index)?;
 
-        let wait_semaphores = &[image_available];
-        let signal_semaphores = &[render_finished];
+        let wait_semaphores = &[frame_sync.image_available];
+        let signal_semaphores = &[frame_sync.render_finished];
         let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
         let command_buffer = self.app_data.command_pools.as_ref().unwrap().command_buffers[image_index];
         let command_buffers = &[command_buffer];
@@ -526,8 +525,8 @@ impl App {
 
         let graphics_queue = self.app_data.graphics_queue.unwrap();
         unsafe {
-            self.device.reset_fences(&[in_flight_fence])?;
-            self.device.queue_submit(graphics_queue, &[submit_info], in_flight_fence)?;
+            self.device.reset_fences(&[frame_sync.in_flight_fence])?;
+            self.device.queue_submit(graphics_queue, &[submit_info], frame_sync.in_flight_fence)?;
         }
 
         let swapchains = &[swapchain];
