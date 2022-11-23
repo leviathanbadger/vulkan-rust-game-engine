@@ -8,7 +8,10 @@ use crate::{
         uniform_buffer_object::{UniformBufferObject},
         simple::{Vertex}
     },
-    bootstrap::bootstrap_depth_buffer_loader::{DepthBufferInfo}
+    bootstrap::{
+        bootstrap_swapchain_loader::{SwapchainInfo},
+        bootstrap_depth_buffer_loader::{DepthBufferInfo}
+    }
 };
 
 #[derive(Debug)]
@@ -21,12 +24,8 @@ pub struct AppData {
     pub graphics_queue_family: Option<u32>,
     pub present_queue_family: Option<u32>,
     pub surface: Option<vk::SurfaceKHR>,
-    pub swapchain_format: Option<vk::Format>,
-    pub swapchain_extent: Option<vk::Extent2D>,
-    pub swapchain: Option<vk::SwapchainKHR>,
-    pub swapchain_images: Vec<vk::Image>,
-    pub swapchain_image_views: Vec<vk::ImageView>,
 
+    pub swapchain: Option<SwapchainInfo>,
     pub depth_buffer: Option<DepthBufferInfo>,
 
     pub render_pass: Option<vk::RenderPass>,
@@ -61,12 +60,8 @@ impl Default for AppData {
             graphics_queue_family: Default::default(),
             present_queue_family: Default::default(),
             surface: Default::default(),
-            swapchain_format: Default::default(),
-            swapchain_extent: Default::default(),
-            swapchain: Default::default(),
-            swapchain_images: Default::default(),
-            swapchain_image_views: Default::default(),
 
+            swapchain: Default::default(),
             depth_buffer: Default::default(),
 
             render_pass: Default::default(),

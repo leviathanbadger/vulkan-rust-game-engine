@@ -479,7 +479,7 @@ impl App {
     }
 
     fn render(&mut self) -> Result<()> {
-        let swapchain = self.app_data.swapchain.unwrap();
+        let swapchain = self.app_data.swapchain.as_ref().unwrap().swapchain;
 
         let sync_frame = (self.frame % self.app_data.max_frames_in_flight()) as usize;
         let image_available = self.app_data.image_available_semaphores[sync_frame];
@@ -556,7 +556,7 @@ impl App {
     }
 
     fn update_uniform_buffer(&mut self, image_index: usize) -> Result<()> {
-        let extent = self.app_data.swapchain_extent.unwrap();
+        let extent = self.app_data.swapchain.as_ref().unwrap().extent;
         let projection = self.camera.get_projection_matrix(extent)?;
 
         let buffer = &mut self.app_data.uniform_buffers[image_index];
@@ -586,7 +586,7 @@ impl App {
             self.device.begin_command_buffer(command_buffer, &begin_info)?;
         }
 
-        let extent = self.app_data.swapchain_extent.unwrap();
+        let extent = self.app_data.swapchain.as_ref().unwrap().extent;
         let render_area = vk::Rect2D::builder()
             .offset(vk::Offset2D::default())
             .extent(extent);

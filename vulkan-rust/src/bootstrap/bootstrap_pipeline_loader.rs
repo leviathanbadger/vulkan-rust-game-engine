@@ -42,8 +42,10 @@ impl BootstrapPipelineLoader {
     }
 
     fn create_render_pass(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
+        let swapchain_format = app_data.swapchain.as_ref().unwrap().surface_format.format;
+
         let color_attachment = vk::AttachmentDescription::builder()
-            .format(app_data.swapchain_format.unwrap())
+            .format(swapchain_format)
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::STORE)
@@ -56,7 +58,7 @@ impl BootstrapPipelineLoader {
             .attachment(0)
             .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
 
-        let depth_buffer_info = &app_data.depth_buffer.unwrap();
+        let depth_buffer_info = app_data.depth_buffer.as_ref().unwrap();
 
         let depth_attachment = vk::AttachmentDescription::builder()
             .format(depth_buffer_info.format())
@@ -142,7 +144,7 @@ impl BootstrapPipelineLoader {
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
             .primitive_restart_enable(false);
 
-        let extent = app_data.swapchain_extent.unwrap();
+        let extent = app_data.swapchain.as_ref().unwrap().extent;
         let viewport = vk::Viewport::builder()
             .x(0.0)
             .y(0.0)

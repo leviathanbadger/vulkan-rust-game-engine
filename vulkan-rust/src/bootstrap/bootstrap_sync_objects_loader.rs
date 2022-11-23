@@ -43,8 +43,8 @@ impl BootstrapSyncObjectsLoader {
         app_data.render_finished_semaphores = render_finished;
         app_data.in_flight_fences = in_flight_fences;
 
-        app_data.images_in_flight = app_data.swapchain_images
-            .iter()
+        let image_count = app_data.swapchain.as_ref().unwrap().image_count;
+        app_data.images_in_flight = (0..image_count)
             .map(|_| vk::Fence::null())
             .collect::<Vec<_>>();
 

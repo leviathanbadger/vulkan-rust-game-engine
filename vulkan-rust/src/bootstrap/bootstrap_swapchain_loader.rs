@@ -9,8 +9,19 @@ use vulkanalia::{
 
 use crate::{
     app::{GraphicsCardSuitabilityError},
-    app_data::{AppData}
+    app_data::{AppData},
+    buffer::{Image2D}
 };
+
+#[derive(Debug, Default)]
+pub struct SwapchainInfo {
+    pub surface_format: vk::SurfaceFormatKHR,
+    pub present_mode: vk::PresentModeKHR,
+    pub extent: vk::Extent2D,
+    pub image_count: u32,
+    pub swapchain: vk::SwapchainKHR,
+    pub images: Vec<Image2D>,
+}
 
 #[derive(Debug)]
 pub struct SwapchainSupport {
@@ -107,9 +118,6 @@ impl BootstrapSwapchainLoader {
         let mode = self.choose_presentation_mode(&swapchain_support).unwrap();
         let extent = self.choose_swapchain_extent(&swapchain_support, window);
 
-        app_data.swapchain_format = Some(format.format);
-        app_data.swapchain_extent = Some(extent);
-
         let mut image_count = swapchain_support.capabilities.min_image_count + 1;
         if swapchain_support.capabilities.max_image_count != 0 && image_count > swapchain_support.capabilities.max_image_count {
             image_count = swapchain_support.capabilities.max_image_count;
@@ -149,69 +157,37 @@ impl BootstrapSwapchainLoader {
             swapchain = device.create_swapchain_khr(&swapchain_info, None)?;
             trace!("Swapchain created: {:?}", swapchain);
         }
-        app_data.swapchain = Some(swapchain);
 
+        let images: Vec<Image2D>;
         unsafe {
-            app_data.swapchain_images = device.get_swapchain_images_khr(swapchain)?;
+            let swapchain_images = device.get_swapchain_images_khr(swapchain)?;
+            images = Image2D::create_from_swapchain_images(&swapchain_images[..], format.format, extent, device)?;
         }
+
+        let mut swapchain_info = SwapchainInfo::default();
+        swapchain_info.surface_format = format;
+        swapchain_info.present_mode = mode;
+        swapchain_info.extent = extent;
+        swapchain_info.image_count = image_count;
+        swapchain_info.swapchain = swapchain;
+        swapchain_info.images = images;
+        app_data.swapchain = Some(swapchain_info);
 
         Ok(())
     }
 
     fn destroy_swapchain(&self, device: &Device, app_data: &mut AppData) -> () {
-        if let Some(swapchain) = app_data.swapchain.take() {
+        if let Some(mut swapchain) = app_data.swapchain.take() {
             debug!("Destroying swapchain...");
+
+            for image in swapchain.images.iter_mut() {
+                image.destroy(device);
+            }
+
             unsafe {
-                device.destroy_swapchain_khr(swapchain, None);
+                device.destroy_swapchain_khr(swapchain.swapchain, None);
             }
         }
-    }
-
-    fn create_swapchain_image_views(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
-        debug!("Creating swapchain image views for {} images...", app_data.swapchain_images.len());
-        let format = app_data.swapchain_format.unwrap();
-        let image_views = app_data.swapchain_images.iter()
-            .map(|i| {
-                let components = vk::ComponentMapping::builder()
-                    .r(vk::ComponentSwizzle::IDENTITY)
-                    .g(vk::ComponentSwizzle::IDENTITY)
-                    .b(vk::ComponentSwizzle::IDENTITY)
-                    .a(vk::ComponentSwizzle::IDENTITY);
-
-                let subresource_range = vk::ImageSubresourceRange::builder()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .base_mip_level(0)
-                    .level_count(1)
-                    .base_array_layer(0)
-                    .layer_count(1);
-
-                let image_view_info = vk::ImageViewCreateInfo::builder()
-                    .image(*i)
-                    .view_type(vk::ImageViewType::_2D)
-                    .format(format)
-                    .components(components)
-                    .subresource_range(subresource_range);
-
-                unsafe {
-                    device.create_image_view(&image_view_info, None)
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        app_data.swapchain_image_views = image_views;
-        debug!("Swapchain image views created: {:?}", app_data.swapchain_image_views);
-
-        Ok(())
-    }
-
-    fn destroy_swapchain_image_views(&self, device: &Device, app_data: &mut AppData) -> () {
-        debug!("Destroying swapchain image views...");
-        unsafe {
-            for image_view in app_data.swapchain_image_views.iter() {
-                device.destroy_image_view(*image_view, None);
-            }
-        }
-        app_data.swapchain_image_views.clear();
     }
 }
 
@@ -247,13 +223,11 @@ impl BootstrapLoader for BootstrapSwapchainLoader {
 
     fn after_create_logical_device(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData) -> Result<()> {
         self.create_swapchain(inst, window, device, app_data)?;
-        self.create_swapchain_image_views(device, app_data)?;
 
         Ok(())
     }
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
-        self.destroy_swapchain_image_views(device, app_data);
         self.destroy_swapchain(device, app_data);
     }
 }

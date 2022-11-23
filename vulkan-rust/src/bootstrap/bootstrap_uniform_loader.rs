@@ -56,7 +56,8 @@ impl BootstrapUniformLoader {
 
     fn create_uniform_buffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
         debug!("Creating uniform buffers...");
-        let mut uniform_buffers = app_data.swapchain_images.iter()
+        let image_count = app_data.swapchain.as_ref().unwrap().image_count;
+        let mut uniform_buffers = (0..image_count)
             .map(|_| {
                 Buffer::<UniformBufferObject>::new(vk::BufferUsageFlags::UNIFORM_BUFFER, 1, false)
             })
@@ -117,8 +118,9 @@ impl BootstrapUniformLoader {
     fn create_descriptor_sets(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
         let desc_pool = app_data.descriptor_pool.unwrap();
         let desc_set_layout = app_data.descriptor_set_layout.unwrap();
+        let image_count = app_data.swapchain.as_ref().unwrap().image_count as usize;
 
-        let layouts = vec![desc_set_layout; app_data.swapchain_images.len()];
+        let layouts = vec![desc_set_layout; image_count];
         let desc_set_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(desc_pool)
             .set_layouts(&layouts);

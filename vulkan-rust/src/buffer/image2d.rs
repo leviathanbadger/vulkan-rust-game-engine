@@ -6,19 +6,43 @@ use vulkanalia::{
 
 use crate::app_data::{AppData};
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone)]
 pub struct Image2D {
     pub format: Option<vk::Format>,
     pub size: Option<vk::Extent2D>,
     pub image: Option<vk::Image>,
     pub image_memory: Option<vk::DeviceMemory>,
     pub image_view: Option<vk::ImageView>,
-    initialized: bool
+    initialized: bool,
+    owns_image: bool
+}
+
+impl Default for Image2D {
+    fn default() -> Self {
+        Self {
+            format: Default::default(),
+            size: Default::default(),
+            image: Default::default(),
+            image_memory: Default::default(),
+            image_view: Default::default(),
+            initialized: false,
+            owns_image: true
+        }
+    }
 }
 
 impl Image2D {
     pub fn new() -> Self {
         Self::default()
+    }
+    fn new_with_image(image: vk::Image, format: vk::Format, size: vk::Extent2D) -> Self {
+        Self {
+            format: Some(format),
+            size: Some(size),
+            image: Some(image),
+            owns_image: false,
+            ..Self::default()
+        }
     }
 
     unsafe fn get_supported_format(&self, inst: &Instance, app_data: &AppData, candidates: &[vk::Format], tiling: vk::ImageTiling, features: vk::FormatFeatureFlags) -> Result<vk::Format> {
@@ -86,6 +110,12 @@ impl Image2D {
     }
 
     fn create_image_view(&mut self, device: &Device, aspect_flags: vk::ImageAspectFlags) -> Result<()> {
+        let components = vk::ComponentMapping::builder()
+            .r(vk::ComponentSwizzle::IDENTITY)
+            .g(vk::ComponentSwizzle::IDENTITY)
+            .b(vk::ComponentSwizzle::IDENTITY)
+            .a(vk::ComponentSwizzle::IDENTITY);
+
         let subresource_range = vk::ImageSubresourceRange::builder()
             .aspect_mask(aspect_flags)
             .base_mip_level(0)
@@ -97,6 +127,7 @@ impl Image2D {
             .image(self.image.unwrap())
             .view_type(vk::ImageViewType::_2D)
             .format(self.format.unwrap())
+            .components(components)
             .subresource_range(subresource_range);
 
         let image_view: vk::ImageView;
@@ -137,15 +168,42 @@ impl Image2D {
         if self.initialized {
             return Err(anyhow!("This image has already been initialized. It can't be created again!"));
         }
+        if !self.owns_image {
+            return Err(anyhow!("This Image2D was constructed with a passed-in vk::Image. It can't be created in a way that creates a new vk::Image."));
+        }
 
         let format = unsafe { self.choose_depth_stencil_format(inst, app_data)? };
         self.format = Some(format);
 
-        let size = app_data.swapchain_extent.unwrap();
+        let size = app_data.swapchain.as_ref().unwrap().extent;
         self.size = Some(size);
 
         self.create_image(device, app_data, size, format, vk::ImageTiling::OPTIMAL, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
         self.create_image_view(device, vk::ImageAspectFlags::DEPTH)?;
+
+        self.initialized = true;
+
+        Ok(())
+    }
+
+    pub fn create_from_swapchain_images(swapchain_images: &[vk::Image], format: vk::Format, size: vk::Extent2D, device: &Device) -> Result<Vec<Image2D>> {
+        swapchain_images.iter()
+            .map(|i| {
+                let mut image = Self::new_with_image(*i, format, size);
+                image.create_from_swapchain_image(device)?;
+                Ok(image)
+            })
+            .collect::<Result<Vec<_>, _>>()
+    }
+    pub fn create_from_swapchain_image(&mut self, device: &Device) -> Result<()> {
+        if self.initialized {
+            return Err(anyhow!("This image has already been initialized. It can't be created again!"));
+        }
+        if self.owns_image {
+            return Err(anyhow!("This Image2D was constructed without a passed-in vk::Image. It can't be created in a way that requires a preexisting vk::Image."));
+        }
+
+        self.create_image_view(device, vk::ImageAspectFlags::COLOR)?;
 
         self.initialized = true;
 
@@ -159,20 +217,23 @@ impl Image2D {
             }
         }
 
-        if let Some(image) = self.image.take() {
-            unsafe {
-                device.destroy_image(image, None);
+        if self.owns_image {
+            if let Some(image) = self.image.take() {
+                unsafe {
+                    device.destroy_image(image, None);
+                }
             }
+
+            if let Some(image_memory) = self.image_memory.take() {
+                unsafe {
+                    device.free_memory(image_memory, None);
+                }
+            }
+
+            self.format = None;
+            self.size = None;
         }
 
-        if let Some(image_memory) = self.image_memory.take() {
-            unsafe {
-                device.free_memory(image_memory, None);
-            }
-        }
-
-        self.format = None;
-        self.size = None;
         self.initialized = false;
     }
 }

@@ -19,14 +19,19 @@ impl BootstrapFramebufferLoader {
     }
 
     fn create_framebuffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
-        debug!("Creating framebuffers for {} image views...", app_data.swapchain_image_views.len());
+        let swapchain_info = app_data.swapchain.as_ref().unwrap();
+        let image_count = swapchain_info.image_count;
+        let swapchain_extent = swapchain_info.extent;
 
-        let depth_image_view = unsafe { app_data.depth_buffer.unwrap().image.raw_image_view().unwrap() };
+        debug!("Creating framebuffers for {} image views...", image_count);
 
-        let framebuffers = app_data.swapchain_image_views.iter()
-            .map(|iv| {
-                let attachments = &[*iv, depth_image_view];
-                let extent = app_data.swapchain_extent.unwrap();
+        let depth_image_view = unsafe { app_data.depth_buffer.as_ref().unwrap().image.raw_image_view().unwrap() };
+
+        let framebuffers = (0..image_count)
+            .map(|q| {
+                let swapchain_image_view = unsafe { swapchain_info.images[q as usize].raw_image_view().unwrap() };
+                let attachments = &[swapchain_image_view, depth_image_view];
+                let extent = swapchain_extent;
                 let framebuffer_info = vk::FramebufferCreateInfo::builder()
                     .render_pass(app_data.render_pass.unwrap())
                     .attachments(attachments)
