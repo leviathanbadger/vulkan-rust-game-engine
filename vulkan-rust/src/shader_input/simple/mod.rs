@@ -15,50 +15,51 @@ fn create_box(pos: glm::Vec3, size: glm::Vec3) -> Vec<Vertex> {
     let bba = glm::vec3(pos.x + size.x, pos.y + size.y, pos.z);
     let bbb = glm::vec3(pos.x + size.x, pos.y + size.y, pos.z + size.z);
 
-    let red = glm::vec3(pos.x + size.x, 0.0, 0.0);
-    let green = glm::vec3(0.0, pos.x + size.x, 0.0);
-    let blue = glm::vec3(0.0, 0.0, pos.x + size.x);
+    let aa = glm::vec2(0.0, 0.0);
+    let ab = glm::vec2(0.0, 1.0);
+    let ba = glm::vec2(1.0, 0.0);
+    let bb = glm::vec2(1.0, 1.0);
 
-    fn dark(color: glm::Vec3) -> glm::Vec3 {
-        glm::vec3(color.x * 0.6, color.y * 0.6, color.z * 0.6)
-    }
+    let red = glm::vec3(1.0, 0.2, 0.2);
+    let green = glm::vec3(0.2, 1.0, 0.2);
+    let blue = glm::vec3(0.2, 0.2, 1.0);
 
     vec![
         //-x
-        Vertex::new(aaa, red),
-        Vertex::new(aba, red),
-        Vertex::new(aab, red),
-        Vertex::new(abb, dark(red)),
+        Vertex::new(aaa, aa, red),
+        Vertex::new(aba, ba, red),
+        Vertex::new(aab, ab, red),
+        Vertex::new(abb, bb, red),
 
         //+x
-        Vertex::new(baa, red),
-        Vertex::new(bab, red),
-        Vertex::new(bba, red),
-        Vertex::new(bbb, dark(red)),
+        Vertex::new(baa, ab, red),
+        Vertex::new(bab, aa, red),
+        Vertex::new(bba, bb, red),
+        Vertex::new(bbb, ba, red),
 
         //-y
-        Vertex::new(aaa, green),
-        Vertex::new(aab, green),
-        Vertex::new(baa, green),
-        Vertex::new(bab, dark(green)),
+        Vertex::new(aaa, aa, green),
+        Vertex::new(aab, ab, green),
+        Vertex::new(baa, ba, green),
+        Vertex::new(bab, bb, green),
 
         //+y
-        Vertex::new(aba, green),
-        Vertex::new(bba, green),
-        Vertex::new(abb, green),
-        Vertex::new(bbb, dark(green)),
+        Vertex::new(aba, aa, green),
+        Vertex::new(bba, ba, green),
+        Vertex::new(abb, ab, green),
+        Vertex::new(bbb, bb, green),
 
         //-z
-        Vertex::new(aaa, blue),
-        Vertex::new(baa, blue),
-        Vertex::new(aba, blue),
-        Vertex::new(bba, dark(blue)),
+        Vertex::new(aaa, ab, blue),
+        Vertex::new(baa, aa, blue),
+        Vertex::new(aba, bb, blue),
+        Vertex::new(bba, ba, blue),
 
         //+z
-        Vertex::new(aab, blue),
-        Vertex::new(abb, blue),
-        Vertex::new(bab, blue),
-        Vertex::new(bbb, dark(blue)),
+        Vertex::new(aab, aa, blue),
+        Vertex::new(abb, ba, blue),
+        Vertex::new(bab, ab, blue),
+        Vertex::new(bbb, bb, blue),
     ]
 }
 
