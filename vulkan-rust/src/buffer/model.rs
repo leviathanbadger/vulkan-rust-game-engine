@@ -10,7 +10,7 @@ use crate::{
     bootstrap::bootstrap_command_buffer_loader::{CommandPoolsInfo}
 };
 
-pub trait CanBeIndexBufferType : Copy + Clone {
+pub trait CanBeIndexBufferType : Copy + Clone + ::std::fmt::Debug {
     fn get_index_type() -> vk::IndexType;
 }
 
@@ -27,13 +27,13 @@ impl CanBeIndexBufferType for u32 {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct Model<TVert, TIndex = u16> where TVert : Copy + Clone, TIndex : CanBeIndexBufferType {
+pub struct Model<TVert, TIndex = u16> where TVert : Copy + Clone + ::std::fmt::Debug, TIndex : CanBeIndexBufferType {
     vertex_buffer: Buffer<TVert>,
     index_buffer: Buffer<TIndex>,
     require_submit: bool
 }
 
-impl<TVert, TIndex> Model<TVert, TIndex> where TVert : Copy + Clone, TIndex : CanBeIndexBufferType {
+impl<TVert, TIndex> Model<TVert, TIndex> where TVert : Copy + Clone + ::std::fmt::Debug, TIndex : CanBeIndexBufferType {
     pub fn new(max_vertex_count: usize, max_index_count: usize, require_submit: bool) -> Result<Self> {
         if TIndex::get_index_type() == vk::IndexType::UINT8_EXT && max_index_count > u8::MAX as usize {
             return Err(anyhow!("Can't create model with u8 index type with more than {} indices", u8::MAX));
@@ -96,10 +96,10 @@ impl<TVert, TIndex> Model<TVert, TIndex> where TVert : Copy + Clone, TIndex : Ca
 
     pub fn write_render_to_command_buffer(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, viewmodel: &glm::Mat4) -> Result<()> {
         unsafe {
-            let vertex_buffer = self.vertex_buffer.raw_buffer().unwrap();
+            let vertex_buffer = self.vertex_buffer.raw_buffer().ok_or_else(|| anyhow!("Could not unwrap vertex buffer. Has this model been initialized?"))?;
             device.cmd_bind_vertex_buffers(*command_buffer, 0, &[vertex_buffer], &[0]);
 
-            let index_buffer = self.index_buffer.raw_buffer().unwrap();
+            let index_buffer = self.index_buffer.raw_buffer().ok_or_else(|| anyhow!("Could not unwrap index buffer. Has this model been initialized?"))?;
             device.cmd_bind_index_buffer(*command_buffer, index_buffer, 0, TIndex::get_index_type());
 
             let push_constants = PushConstants {

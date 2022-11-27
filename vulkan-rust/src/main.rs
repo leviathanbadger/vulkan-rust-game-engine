@@ -3,9 +3,11 @@ mod buffer;
 mod game;
 mod shader_input;
 mod util;
-mod app;
+
 mod app_data;
+mod app;
 mod builder;
+mod frame_info;
 
 use anyhow::{Result};
 use winit::dpi::{LogicalSize};

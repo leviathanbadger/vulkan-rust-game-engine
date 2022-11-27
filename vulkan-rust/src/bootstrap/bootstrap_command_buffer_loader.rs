@@ -7,11 +7,7 @@ use vulkanalia::{
 };
 
 use crate::{
-    app_data::{AppData, VulkanQueueInfo},
-    shader_input::{
-        simple::{Vertex, CUBE_VERTICES, CUBE_INDICES}
-    },
-    buffer::{Model}
+    app_data::{AppData, VulkanQueueInfo}
 };
 
 #[derive(Debug)]
@@ -19,7 +15,6 @@ pub struct CommandPoolsInfo {
     queue_info: Arc<VulkanQueueInfo>,
 
     pub command_pool: vk::CommandPool,
-    pub cube_model: Option<Model<Vertex>>,
 
     pub transient_command_pool: vk::CommandPool,
     pub command_buffers: Vec<vk::CommandBuffer>
@@ -31,7 +26,6 @@ impl CommandPoolsInfo {
             queue_info,
 
             command_pool: Default::default(),
-            cube_model: Default::default(),
             transient_command_pool: Default::default(),
             command_buffers: Default::default()
         }
@@ -169,27 +163,6 @@ impl BootstrapCommandBufferLoader {
         command_pools_info.transient_command_pool = vk::CommandPool::null();
     }
 
-    fn create_cube_model(&self, device: &Device, command_pools_info: &mut CommandPoolsInfo, app_data: &AppData) -> Result<()> {
-        debug!("Creating cube model...");
-        let mut model = Model::<Vertex>::new(CUBE_VERTICES.len(), CUBE_INDICES.len(), true)?;
-
-        model.create(device, app_data.memory_properties)?;
-        model.set_data(device, &*CUBE_VERTICES, &*CUBE_INDICES)?;
-        model.submit(device, &command_pools_info)?;
-
-        command_pools_info.cube_model = Some(model);
-
-        Ok(())
-    }
-
-    fn destroy_cube_model(&self, device: &Device, command_pools_info: &mut CommandPoolsInfo) -> () {
-        debug!("Destroying cube model...");
-
-        if let Some(mut cube_model) = command_pools_info.cube_model.take() {
-            cube_model.destroy(device);
-        }
-    }
-
     fn create_command_buffers(&self, device: &Device, command_pools_info: &mut CommandPoolsInfo, app_data: &AppData) -> Result<()> {
         let command_pool = command_pools_info.command_pool;
         let count = app_data.swapchain.as_ref().unwrap().image_count;
@@ -223,7 +196,6 @@ impl BootstrapLoader for BootstrapCommandBufferLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
         let mut command_pools_info = CommandPoolsInfo::new(app_data.queue_info.as_ref().unwrap().clone());
         self.create_command_pools(device, &mut command_pools_info, app_data)?;
-        self.create_cube_model(device, &mut command_pools_info, app_data)?;
         self.create_command_buffers(device, &mut command_pools_info, app_data)?;
         app_data.command_pools = Some(command_pools_info);
 
@@ -233,13 +205,12 @@ impl BootstrapLoader for BootstrapCommandBufferLoader {
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
         if let Some(mut command_pools_info) = app_data.command_pools.take() {
             self.destroy_command_buffers(device, &mut command_pools_info);
-            self.destroy_cube_model(device, &mut command_pools_info);
             self.destroy_command_pools(device, &mut command_pools_info);
         }
     }
 
     fn recreate_swapchain(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData, next: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>) -> Result<()> {
-        trace!("Recreating command buffers (but not command pool or cube model) in recreate_swapchain");
+        trace!("Recreating command buffers (but not command pool) in recreate_swapchain");
 
         let mut command_pools_info = app_data.command_pools.take().unwrap();
 

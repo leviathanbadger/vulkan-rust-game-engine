@@ -31,9 +31,17 @@ use crate::{
         queue_family_indices::QueueFamilyIndices
     },
     shader_input::{
-        uniform_buffer_object::{UniformBufferObject}
+        uniform_buffer_object::{UniformBufferObject},
+        simple::{CUBE_VERTICES, CUBE_INDICES}
     },
-    game::camera::{Camera, HasCameraMatrix, ORIGIN}
+    game::{
+        has_camera_matrix::{HasCameraMatrix},
+        scene::{Scene},
+        transform::{ORIGIN},
+        game_object::{GameObject},
+        components::{RotateOverTimeComponent, RenderModelComponent}
+    },
+    frame_info::{FrameInfo}
 };
 
 #[derive(Debug, Error)]
@@ -51,9 +59,10 @@ pub struct App {
     pub inst: Instance,
     pub device: Device,
     pub bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>,
-    pub camera: Camera,
-    frame: u32,
-    start_time: Instant,
+
+    pub scene: Box<Scene>,
+    pub frame_info: FrameInfo,
+
     destroying: bool,
     needs_new_swapchain: bool,
     shutdown_requested: Arc<AtomicBool>
@@ -102,9 +111,15 @@ impl App {
             loader.after_create_logical_device(&inst, &device, &window, &mut app_data)?;
         }
 
-        let mut camera = Camera::default();
-        camera.set_pos(glm::vec3(5.0, 3.0, 5.0));
-        camera.look_at(*ORIGIN);
+        let mut scene = Scene::new();
+
+        scene.render_camera.transform.pos = glm::vec3(5.0, 3.0, 5.0);
+        scene.render_camera.look_at(*ORIGIN);
+
+        let mut game_object = Box::new(GameObject::new());
+        game_object.add_component(Box::new(RotateOverTimeComponent::new()))?;
+        game_object.add_component(Box::new(RenderModelComponent::new(&*CUBE_VERTICES, &*CUBE_INDICES)?))?;
+        scene.add_game_object(game_object)?;
 
         Ok(Self {
             event_loop: Some(event_loop),
@@ -114,9 +129,10 @@ impl App {
             inst,
             device,
             bootstrap_loaders: bootstrap_loaders,
-            camera,
-            frame: 0,
-            start_time: Instant::now(),
+
+            scene: Box::new(scene),
+            frame_info: FrameInfo::default(),
+
             destroying: false,
             needs_new_swapchain: false,
             shutdown_requested: Arc::new(AtomicBool::new(false))
@@ -458,10 +474,15 @@ impl App {
 
     fn game_loop(&mut self) -> Result<()> {
         if !self.needs_new_swapchain {
-            //TODO: update game state
+            self.frame_info.current_frame_time = Instant::now();
+            self.frame_info.current_frame_delta_time = self.frame_info.current_frame_time - self.frame_info.last_frame_start_time;
+            self.scene.tick(&self.frame_info)?;
+            self.frame_info.last_frame_start_time = self.frame_info.current_frame_time;
+
+            self.scene.load_and_unload(&self.device, &self.app_data)?;
 
             self.render()?;
-            self.frame += 1;
+            self.frame_info.current_frame_index += 1;
         }
 
         if self.needs_new_swapchain {
@@ -482,7 +503,7 @@ impl App {
     fn render(&mut self) -> Result<()> {
         let swapchain = self.app_data.swapchain.as_ref().unwrap().swapchain;
 
-        let sync_frame = (self.frame % self.app_data.max_frames_in_flight()) as usize;
+        let sync_frame = (self.frame_info.current_frame_index % self.app_data.max_frames_in_flight()) as usize;
         let sync_objects_info = self.app_data.sync_objects.as_mut().unwrap();
         let frame_sync = sync_objects_info.get_sync_objects(sync_frame)?;
 
@@ -554,13 +575,13 @@ impl App {
 
     fn update_uniform_buffer(&mut self, image_index: usize) -> Result<()> {
         let extent = self.app_data.swapchain.as_ref().unwrap().extent;
-        let projection = self.camera.get_projection_matrix(extent)?;
+        let projection = self.scene.render_camera.get_projection_matrix(extent)?;
 
         let buffer = &mut self.app_data.uniforms.as_mut().unwrap().uniform_buffers[image_index];
         let ubo = UniformBufferObject {
             proj: projection,
-            frame_index: self.frame,
-            time_in_seconds: self.start_time.elapsed().as_secs_f32()
+            frame_index: self.frame_info.current_frame_index,
+            time_in_seconds: self.frame_info.current_frame_delta_time.as_secs_f32()
         };
         buffer.set_data(&self.device, &ubo)?;
 
@@ -573,9 +594,10 @@ impl App {
             .offset(vk::Offset2D::default())
             .extent(extent);
 
+        let clear_color = self.scene.clear_color;
         let color_clear_value = vk::ClearValue {
             color: vk::ClearColorValue {
-                float32: [0.0, 0.0, 0.0, 1.0]
+                float32: [clear_color[0], clear_color[1], clear_color[2], 1.0]
             }
         };
         let depth_clear_value = vk::ClearValue {
@@ -602,18 +624,11 @@ impl App {
         unsafe {
             self.device.cmd_begin_render_pass(*command_buffer, &render_pass_info, vk::SubpassContents::INLINE);
 
-            self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
-
-            self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
-
             {
-                let angle = self.start_time.elapsed().as_secs_f64() * glm::radians(&glm::vec1(90.0))[0];
-                let model = glm::rotate(&glm::identity(), angle, &glm::vec3(0.0f64, 1.0f64, 0.0f64));
-                let view = self.camera.get_view_matrix()?;
-                let viewmodel = glm::convert::<glm::DMat4, glm::Mat4>(view * model);
+                self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
+                self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
 
-                let cube = self.app_data.command_pools.as_ref().unwrap().cube_model.unwrap();
-                cube.write_render_to_command_buffer(&self.device, command_buffer, &pipeline_layout, &viewmodel)?;
+                self.scene.render(&self.device, command_buffer, &pipeline_layout)?;
             }
 
             self.device.cmd_end_render_pass(*command_buffer);
@@ -628,9 +643,10 @@ impl App {
             return;
         }
 
-        let duration = self.start_time.elapsed();
-        let avg_fps = (self.frame as f32) / duration.as_secs_f32();
-        info!("Rendered {} frames total over {:?}. Average FPS: {}. Calculation may be incorrect if the window was minimized at any point", self.frame, duration, avg_fps);
+        let duration = self.frame_info.app_start_time.elapsed();
+        let current_frame_index = self.frame_info.current_frame_index;
+        let avg_fps = (current_frame_index as f32) / duration.as_secs_f32();
+        info!("Rendered {} frames total over {:?}. Average FPS: {}. Calculation may be incorrect if the window was minimized at any point", current_frame_index, duration, avg_fps);
         self.destroying = true;
 
         self.destroy();
@@ -639,6 +655,8 @@ impl App {
     fn destroy(&mut self) {
         unsafe {
             self.device.device_wait_idle().unwrap();
+
+            self.scene.unload(&self.device);
 
             for loader in self.bootstrap_loaders.iter().rev() {
                 loader.before_destroy_logical_device(&self.inst, &self.device, &mut self.app_data);
@@ -662,10 +680,11 @@ impl App {
     }
 }
 
-//TODO: move the cube model into a scene abstraction
+//TODO: ignore all window messages after we start shutting down application (don't just warn)
 //TODO: finish refactoring AppData. Maybe change the abstraction completely for some objects
 //TODO: add support for loading and using textures in shaders
 //TODO: add support for loading models from OBJ files (rather than hardcoded in-app)
+//TODO: learn to use (and actually use) HDR color space
 //TODO: deprecate static_screen_space shader, or update it to use screen coordinates and support textures/ETC
 //TODO: add asynchronous loading of assets; move asset loading onto other threads (placeholder models/textures if things don't load fast enough)
 //TODO: single location for GPU memory management (allocation/freeing)

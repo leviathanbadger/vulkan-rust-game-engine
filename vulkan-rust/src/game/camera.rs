@@ -1,16 +1,12 @@
+use super::transform::{Transform};
+
 use nalgebra_glm as glm;
 use anyhow::{Result};
-use lazy_static::{lazy_static};
 use vulkanalia::{
     prelude::v1_0::*
 };
 
 pub use crate::game::has_camera_matrix::{HasCameraMatrix};
-
-lazy_static! {
-    pub static ref ORIGIN: glm::DVec3 = glm::zero::<glm::DVec3>();
-    pub static ref DEFAULT_UP: glm::Vec3 = glm::vec3(0.0, 1.0, 0.0);
-}
 
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub enum CameraKind {
@@ -22,8 +18,7 @@ pub enum CameraKind {
 
 #[derive(Debug, Copy, Clone)]
 pub struct Camera {
-    pos: glm::DVec3,
-    orient: glm::Quat,
+    pub transform: Transform,
     near: f32,
     far: f32,
     kind: CameraKind,
@@ -33,8 +28,7 @@ pub struct Camera {
 impl Default for Camera {
     fn default() -> Self {
         Self {
-            pos: Default::default(),
-            orient: Default::default(),
+            transform: Default::default(),
             near: 0.001,
             far: 1000.0,
             kind: Default::default(),
@@ -45,26 +39,11 @@ impl Default for Camera {
 
 #[allow(unused)]
 impl Camera {
-    pub fn pos(&self) -> glm::DVec3 {
-        self.pos
-    }
-    pub fn set_pos(&mut self, pos: glm::DVec3) -> () {
-        self.pos = pos;
-    }
-
-    pub fn orient(&self) -> glm::Quat {
-        self.orient
-    }
-    pub fn set_orient(&mut self, orient: glm::Quat) -> () {
-        self.orient = orient;
-    }
-
     pub fn look_at(&mut self, target: glm::DVec3) -> () {
-        self.look_at_up(target, *DEFAULT_UP);
+        self.transform.look_at(target);
     }
     pub fn look_at_up(&mut self, target: glm::DVec3, up: glm::Vec3) -> () {
-        let dir = glm::convert::<glm::DVec3, glm::Vec3>(target - self.pos);
-        self.orient = glm::quat_look_at(&dir, &up);
+        self.transform.look_at_up(target, up);
     }
 
     pub fn near(&self) -> f32 {
@@ -98,11 +77,7 @@ impl Camera {
 
 impl HasCameraMatrix for Camera {
     fn get_view_matrix(&self) -> Result<glm::DMat4> {
-        let view_mat4 = glm::quat_to_mat4(&self.orient);
-        let mut view = glm::convert::<glm::Mat4, glm::DMat4>(view_mat4);
-        view = glm::translate(&view, &-self.pos);
-
-        Ok(view)
+        self.transform.as_matrix()
     }
 
     fn get_projection_matrix(&self, bounds: vk::Extent2D) -> Result<glm::Mat4> {
