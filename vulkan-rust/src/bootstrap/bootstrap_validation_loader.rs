@@ -49,6 +49,7 @@ extern "system" fn debug_callback(
     vk::FALSE
 }
 
+//Should be first, if present. Depends on nothing
 impl BootstrapLoader for BootstrapValidationLoader {
     fn add_required_instance_layers(&self, required_layers: &mut Vec<*const i8>) -> Result<()> {
         required_layers.push(VALIDATION_LAYER.as_ptr());

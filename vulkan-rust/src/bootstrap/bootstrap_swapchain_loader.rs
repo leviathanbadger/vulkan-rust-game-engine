@@ -47,6 +47,7 @@ impl SwapchainSupport {
 #[derive(Debug, Default)]
 pub struct BootstrapSwapchainLoader { }
 
+//Depends on nothing
 impl BootstrapSwapchainLoader {
     pub fn new() -> Self {
         Self::default()

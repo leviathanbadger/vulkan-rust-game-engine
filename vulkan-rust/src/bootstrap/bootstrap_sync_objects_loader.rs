@@ -58,6 +58,7 @@ impl SyncObjectsInfo {
 #[derive(Debug, Default)]
 pub struct BootstrapSyncObjectsLoader { }
 
+//Depends on swapchain
 impl BootstrapSyncObjectsLoader {
     pub fn new() -> Self {
         Self::default()

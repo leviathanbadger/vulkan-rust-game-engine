@@ -25,7 +25,7 @@ impl DepthBufferInfo {
 #[derive(Debug, Default)]
 pub struct BootstrapDepthBufferLoader { }
 
-//Depends on swapchain
+//Depends on swapchain, command pools
 impl BootstrapDepthBufferLoader {
     pub fn new() -> Self {
         Self::default()
@@ -35,7 +35,9 @@ impl BootstrapDepthBufferLoader {
         debug!("Creating depth and stencil buffer objects...");
 
         let mut image = Image2D::new();
-        image.create_depth_stencil_buffer(inst, device, app_data)?;
+        let extent = app_data.swapchain.as_ref().unwrap().extent;
+        let command_pools = app_data.command_pools.as_ref().unwrap();
+        image.create_depth_stencil_buffer(inst, device, app_data.physical_device.as_ref().unwrap(), &app_data.memory_properties, &extent, command_pools)?;
 
         let mut depth_buffer_info = DepthBufferInfo::default();
         depth_buffer_info.image = image;

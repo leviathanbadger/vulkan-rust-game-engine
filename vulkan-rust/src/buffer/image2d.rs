@@ -8,7 +8,6 @@ use vulkanalia::{
 };
 
 use crate::{
-    app_data::{AppData},
     bootstrap::bootstrap_command_buffer_loader::{CommandPoolsInfo}
 };
 
@@ -53,10 +52,9 @@ impl Image2D {
         }
     }
 
-    unsafe fn get_supported_format(&self, inst: &Instance, app_data: &AppData, candidates: &[vk::Format], tiling: vk::ImageTiling, features: vk::FormatFeatureFlags) -> Result<vk::Format> {
-        let physical_device = app_data.physical_device.unwrap();
+    unsafe fn get_supported_format(&self, inst: &Instance, physical_device: &vk::PhysicalDevice, candidates: &[vk::Format], tiling: vk::ImageTiling, features: vk::FormatFeatureFlags) -> Result<vk::Format> {
         for format in candidates.iter() {
-            let properties = inst.get_physical_device_format_properties(physical_device, *format);
+            let properties = inst.get_physical_device_format_properties(*physical_device, *format);
             let supported = match tiling {
                 vk::ImageTiling::LINEAR => properties.linear_tiling_features.contains(features),
                 vk::ImageTiling::OPTIMAL => properties.optimal_tiling_features.contains(features),
@@ -70,14 +68,14 @@ impl Image2D {
         Err(anyhow!("Failed to find a supported format for depth/stencil buffer"))
     }
 
-    unsafe fn choose_depth_stencil_format(&self, inst: &Instance, app_data: &AppData) -> Result<vk::Format> {
+    unsafe fn choose_depth_stencil_format(&self, inst: &Instance, physical_device: &vk::PhysicalDevice) -> Result<vk::Format> {
         let candidates = &[
             vk::Format::D32_SFLOAT_S8_UINT,
             vk::Format::D24_UNORM_S8_UINT,
             vk::Format::D32_SFLOAT
         ];
 
-        self.get_supported_format(inst, app_data, candidates, vk::ImageTiling::OPTIMAL, vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT)
+        self.get_supported_format(inst, physical_device, candidates, vk::ImageTiling::OPTIMAL, vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT)
     }
 
     fn create_image(&mut self, device: &Device, memory_properties: &PhysicalDeviceMemoryProperties, size: vk::Extent2D, format: vk::Format, tiling: vk::ImageTiling, usage_flags: vk::ImageUsageFlags, memory_flags: vk::MemoryPropertyFlags) -> Result<()> {
@@ -177,8 +175,19 @@ impl Image2D {
     }
 
     fn transition_image_layout(&self, device: &Device, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout, command_pool_info: &CommandPoolsInfo) -> Result<()> {
+        let format = self.format.unwrap();
+        let aspect_mask: vk::ImageAspectFlags = match new_layout {
+            vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL => {
+                match format {
+                    vk::Format::D32_SFLOAT_S8_UINT | vk::Format::D24_UNORM_S8_UINT => vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
+                    _ => vk::ImageAspectFlags::COLOR
+                }
+            },
+            _ => vk::ImageAspectFlags::COLOR
+        };
+
         let subresource = vk::ImageSubresourceRange::builder()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .aspect_mask(aspect_mask)
             .base_mip_level(0)
             .level_count(1)
             .base_array_layer(0)
@@ -187,6 +196,7 @@ impl Image2D {
         let (src_access_mask, dst_access_mask, src_stage_mask, dst_stage_mask) = match (old_layout, new_layout) {
             (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (vk::AccessFlags::empty(), vk::AccessFlags::TRANSFER_WRITE, vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::TRANSFER),
             (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (vk::AccessFlags::TRANSFER_WRITE, vk::AccessFlags::SHADER_READ, vk::PipelineStageFlags::TRANSFER, vk::PipelineStageFlags::FRAGMENT_SHADER),
+            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => (vk::AccessFlags::empty(), vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE, vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS),
             _ => return Err(anyhow!("Unsupported image layout transition"))
         };
 
@@ -271,7 +281,7 @@ impl Image2D {
         self.image_view
     }
 
-    pub fn create_depth_stencil_buffer(&mut self, inst: &Instance, device: &Device, app_data: &AppData) -> Result<()> {
+    pub fn create_depth_stencil_buffer(&mut self, inst: &Instance, device: &Device, physical_device: &vk::PhysicalDevice, memory_properties: &PhysicalDeviceMemoryProperties, extent: &vk::Extent2D, command_pools: &CommandPoolsInfo) -> Result<()> {
         if self.initialized {
             return Err(anyhow!("This image has already been initialized. It can't be created again!"));
         }
@@ -279,14 +289,16 @@ impl Image2D {
             return Err(anyhow!("This Image2D was constructed with a passed-in vk::Image. It can't be created in a way that creates a new vk::Image."));
         }
 
-        let format = unsafe { self.choose_depth_stencil_format(inst, app_data)? };
+        let format = unsafe { self.choose_depth_stencil_format(inst, physical_device)? };
         self.format = Some(format);
 
-        let size = app_data.swapchain.as_ref().unwrap().extent;
+        let size = *extent;
         self.size = Some(size);
 
-        self.create_image(device, &app_data.memory_properties, size, format, vk::ImageTiling::OPTIMAL, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
+        self.create_image(device, memory_properties, size, format, vk::ImageTiling::OPTIMAL, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
         self.create_image_view(device, vk::ImageAspectFlags::DEPTH)?;
+
+        self.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL, command_pools)?;
 
         self.initialized = true;
 

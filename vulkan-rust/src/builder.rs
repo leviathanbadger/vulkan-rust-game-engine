@@ -59,11 +59,11 @@ impl AppBuilder {
     pub fn add_default_bootstrap_loaders(self) -> Self {
         self.add_bootstrap_loader(Box::new(BootstrapTextureSamplingLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapSwapchainLoader::new()))
+            .add_bootstrap_loader(Box::new(BootstrapCommandBufferLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapUniformLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapDepthBufferLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapPipelineLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapFramebufferLoader::new()))
-            .add_bootstrap_loader(Box::new(BootstrapCommandBufferLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapSyncObjectsLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapDescriptorSetLoader::new()))
     }

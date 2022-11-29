@@ -19,6 +19,7 @@ impl BootstrapTextureSamplingLoader {
     }
 }
 
+//Depends on nothing
 impl BootstrapLoader for BootstrapTextureSamplingLoader {
     fn add_required_device_features(&self, features: &mut vk::PhysicalDeviceFeaturesBuilder) -> Result<()> {
         *features = features.sampler_anisotropy(true);

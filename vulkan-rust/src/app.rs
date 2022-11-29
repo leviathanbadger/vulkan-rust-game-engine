@@ -686,6 +686,7 @@ impl App {
     }
 }
 
+//TODO: update validation loader to enable best practices validation
 //TODO: finish refactoring AppData. Maybe change the abstraction completely for some objects
 //TODO: dynamically create/update descriptor sets based on materials
 //TODO: improve method of ordering bootstrap loaders so the dependencies aren't handled manually
