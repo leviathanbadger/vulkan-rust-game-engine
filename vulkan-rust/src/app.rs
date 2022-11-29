@@ -424,6 +424,12 @@ impl App {
         //TODO: Don't abuse Option<> in the struct in order to call run on the event loop without causing an ownership error
         let event_loop = self.event_loop.take().unwrap();
         event_loop.run(move |event, _, control_flow| {
+            if self.destroying {
+                *control_flow = ControlFlow::Exit;
+                warn!("Window message received after shutdown began: {:?}", event);
+                return ();
+            }
+
             *control_flow = ControlFlow::Poll;
             match event {
                 Event::MainEventsCleared => {
@@ -680,7 +686,6 @@ impl App {
     }
 }
 
-//TODO: ignore all window messages after we start shutting down application (don't just warn)
 //TODO: finish refactoring AppData. Maybe change the abstraction completely for some objects
 //TODO: dynamically create/update descriptor sets based on materials
 //TODO: improve method of ordering bootstrap loaders so the dependencies aren't handled manually
