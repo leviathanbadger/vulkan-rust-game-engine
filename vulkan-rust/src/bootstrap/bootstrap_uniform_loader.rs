@@ -1,7 +1,5 @@
 use super::{BootstrapLoader};
-use std::{
-    mem::{size_of}
-};
+
 use anyhow::{Result};
 use winit::window::{Window};
 use vulkanalia::{
@@ -20,13 +18,13 @@ use crate::{
 pub struct UniformsInfo {
     pub descriptor_set_layout: vk::DescriptorSetLayout,
     pub uniform_buffers: Vec<Buffer::<UniformBufferObject>>,
-    pub descriptor_pool: vk::DescriptorPool,
-    pub descriptor_sets: Vec<vk::DescriptorSet>
+    pub descriptor_pool: vk::DescriptorPool
 }
 
 #[derive(Debug, Default)]
 pub struct BootstrapUniformLoader { }
 
+//Depends on swapchain
 impl BootstrapUniformLoader {
     pub fn new() -> Self {
         Self::default()
@@ -39,7 +37,13 @@ impl BootstrapUniformLoader {
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS);
 
-        let bindings = &[ubo_binding];
+        let sampler_binding = vk::DescriptorSetLayoutBinding::builder()
+            .binding(1)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS);
+
+        let bindings = &[ubo_binding, sampler_binding];
         let dsl_info = vk::DescriptorSetLayoutCreateInfo::builder()
             .bindings(bindings);
 
@@ -72,7 +76,7 @@ impl BootstrapUniformLoader {
             .collect::<Vec<_>>();
 
         for buffer in uniform_buffers.iter_mut() {
-            buffer.create(device, app_data.memory_properties)?;
+            buffer.create(device, &app_data.memory_properties)?;
         }
 
         debug!("Uniform buffers created: {:?}", uniform_buffers);
@@ -97,7 +101,11 @@ impl BootstrapUniformLoader {
             .type_(vk::DescriptorType::UNIFORM_BUFFER)
             .descriptor_count(max_sets);
 
-        let pool_sizes = &[ubo_size];
+        let sampler_size = vk::DescriptorPoolSize::builder()
+            .type_(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(max_sets);
+
+        let pool_sizes = &[ubo_size, sampler_size];
         let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
             .pool_sizes(pool_sizes)
             .max_sets(max_sets);
@@ -121,46 +129,6 @@ impl BootstrapUniformLoader {
         }
         uniforms_info.descriptor_pool = vk::DescriptorPool::null();
     }
-
-    fn create_descriptor_sets(&self, device: &Device, uniforms_info: &mut UniformsInfo, app_data: &AppData) -> Result<()> {
-        let image_count = app_data.swapchain.as_ref().unwrap().image_count as usize;
-
-        let layouts = vec![uniforms_info.descriptor_set_layout; image_count];
-        let desc_set_info = vk::DescriptorSetAllocateInfo::builder()
-            .descriptor_pool(uniforms_info.descriptor_pool)
-            .set_layouts(&layouts);
-
-        let desc_sets: Vec<vk::DescriptorSet>;
-        unsafe {
-            debug!("Allocating descriptor sets...");
-            desc_sets = device.allocate_descriptor_sets(&desc_set_info)?;
-        }
-
-        for (q, desc_set) in desc_sets.iter().enumerate() {
-            let buffer = unsafe { uniforms_info.uniform_buffers[q].raw_buffer().unwrap() };
-            let info = vk::DescriptorBufferInfo::builder()
-                .buffer(buffer)
-                .offset(0)
-                .range(size_of::<UniformBufferObject>() as u64);
-
-            let buffer_info = &[info];
-            let ubo_write = vk::WriteDescriptorSet::builder()
-                .dst_set(*desc_set)
-                .dst_binding(0)
-                .dst_array_element(0)
-                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                .buffer_info(buffer_info);
-
-            unsafe {
-                device.update_descriptor_sets(&[ubo_write], &[] as &[vk::CopyDescriptorSet]);
-            }
-        }
-
-        debug!("Descriptor sets allocated: {:?}", desc_sets);
-        uniforms_info.descriptor_sets = desc_sets;
-
-        Ok(())
-    }
 }
 
 impl BootstrapLoader for BootstrapUniformLoader {
@@ -169,7 +137,6 @@ impl BootstrapLoader for BootstrapUniformLoader {
         self.create_descriptor_set_layout(device, &mut uniforms_info)?;
         self.create_uniform_buffers(device, &mut uniforms_info, app_data)?;
         self.create_descriptor_pool(device, &mut uniforms_info, app_data)?;
-        self.create_descriptor_sets(device, &mut uniforms_info, app_data)?;
         app_data.uniforms = Some(uniforms_info);
 
         Ok(())
@@ -177,7 +144,6 @@ impl BootstrapLoader for BootstrapUniformLoader {
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
         if let Some(mut uniforms_info) = app_data.uniforms.take() {
-            uniforms_info.descriptor_sets.clear(); //No need to clean these up, apparently
             self.destroy_descriptor_pool(device, &mut uniforms_info);
             self.destroy_uniform_buffers(device, &mut uniforms_info);
             self.destroy_descriptor_set_layout(device, &mut uniforms_info);
@@ -185,17 +151,15 @@ impl BootstrapLoader for BootstrapUniformLoader {
     }
 
     fn recreate_swapchain(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData, next: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>) -> Result<()> {
-        trace!("Recreating descriptor sets, descriptor pool, and uniform buffers (but not descriptor set layout) in recreate_swapchain");
+        trace!("Recreating descriptor pool, and uniform buffers (but not descriptor set layout) in recreate_swapchain");
 
         let mut uniforms_info = app_data.uniforms.take().unwrap();
 
-        uniforms_info.descriptor_sets.clear(); //No need to clean these up, apparently
         self.destroy_descriptor_pool(device, &mut uniforms_info);
         self.destroy_uniform_buffers(device, &mut uniforms_info);
         next(inst, device, window, app_data)?;
         self.create_uniform_buffers(device, &mut uniforms_info, app_data)?;
         self.create_descriptor_pool(device, &mut uniforms_info, app_data)?;
-        self.create_descriptor_sets(device, &mut uniforms_info, app_data)?;
 
         app_data.uniforms = Some(uniforms_info);
 

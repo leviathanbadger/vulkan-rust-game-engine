@@ -116,6 +116,7 @@ impl CommandPoolsInfo {
 #[derive(Debug, Default)]
 pub struct BootstrapCommandBufferLoader { }
 
+//Depends on swapchain
 impl BootstrapCommandBufferLoader {
     pub fn new() -> Self {
         Self::default()

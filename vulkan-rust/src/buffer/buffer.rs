@@ -27,7 +27,7 @@ pub struct Buffer<T> where T : Copy + Clone {
     phantom: PhantomData<T>
 }
 
-pub fn get_memory_type_index(memory: vk::PhysicalDeviceMemoryProperties, properties: vk::MemoryPropertyFlags, requirements: vk::MemoryRequirements) -> Result<u32> {
+pub fn get_memory_type_index(memory: &vk::PhysicalDeviceMemoryProperties, properties: vk::MemoryPropertyFlags, requirements: vk::MemoryRequirements) -> Result<u32> {
     (0..memory.memory_type_count)
         .find(|i| {
             let is_suitable = (requirements.memory_type_bits & (1 << i)) != 0;
@@ -90,7 +90,7 @@ impl<T> Buffer<T> where T : Copy + Clone {
         self.staging_buffer_memory
     }
 
-    fn create_buffer(&self, device: &Device, usage_flags: vk::BufferUsageFlags, memory_flags: vk::MemoryPropertyFlags, memory: vk::PhysicalDeviceMemoryProperties) -> Result<(vk::Buffer, vk::DeviceMemory)> {
+    fn create_buffer(&self, device: &Device, usage_flags: vk::BufferUsageFlags, memory_flags: vk::MemoryPropertyFlags, memory: &vk::PhysicalDeviceMemoryProperties) -> Result<(vk::Buffer, vk::DeviceMemory)> {
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(self.allocated_buffer_size())
             .usage(usage_flags)
@@ -118,7 +118,7 @@ impl<T> Buffer<T> where T : Copy + Clone {
         Ok((buff, buff_memory))
     }
 
-    pub fn create(&mut self, device: &Device, memory: vk::PhysicalDeviceMemoryProperties) -> Result<()> {
+    pub fn create(&mut self, device: &Device, memory: &vk::PhysicalDeviceMemoryProperties) -> Result<()> {
         {
             let usage_flags = if self.require_submit { self.usage | vk::BufferUsageFlags::TRANSFER_DST } else { self.usage };
             let memory_flags = if self.require_submit { vk::MemoryPropertyFlags::DEVICE_LOCAL } else { vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE };
@@ -141,6 +141,11 @@ impl<T> Buffer<T> where T : Copy + Clone {
     }
 
     pub fn set_data(&mut self, device: &Device, data: &impl IntoBufferData<T>) -> Result<()> {
+        let is_created = if self.require_submit { self.staging_buffer_memory.is_some() } else { self.buffer_memory.is_some() };
+        if !is_created {
+            return Err(anyhow!("Buffer is not created. Can't call set_data until it is created."));
+        }
+
         let count = data.element_count();
         if count > self.max_element_count {
             return Err(anyhow!("Can't set data from source with more elements than specified when creating buffer."));

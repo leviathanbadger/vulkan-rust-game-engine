@@ -25,6 +25,7 @@ impl DepthBufferInfo {
 #[derive(Debug, Default)]
 pub struct BootstrapDepthBufferLoader { }
 
+//Depends on swapchain
 impl BootstrapDepthBufferLoader {
     pub fn new() -> Self {
         Self::default()

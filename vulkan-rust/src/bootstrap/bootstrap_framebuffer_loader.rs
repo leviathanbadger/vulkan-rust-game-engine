@@ -18,6 +18,7 @@ pub struct FramebufferInfo {
 #[derive(Debug, Default)]
 pub struct BootstrapFramebufferLoader { }
 
+//Depends on swapchain and pipeline
 impl BootstrapFramebufferLoader {
     pub fn new() -> Self {
         Self::default()

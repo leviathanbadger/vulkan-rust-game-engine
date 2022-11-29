@@ -62,7 +62,7 @@ impl<TVert, TIndex> Model<TVert, TIndex> where TVert : Copy + Clone + ::std::fmt
         &self.index_buffer
     }
 
-    pub fn create(&mut self, device: &Device, memory: vk::PhysicalDeviceMemoryProperties) -> Result<()> {
+    pub fn create(&mut self, device: &Device, memory: &vk::PhysicalDeviceMemoryProperties) -> Result<()> {
         self.vertex_buffer.create(device, memory)?;
         self.index_buffer.create(device, memory)?;
 

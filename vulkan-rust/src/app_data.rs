@@ -12,7 +12,8 @@ use crate::{
         bootstrap_pipeline_loader::{PipelineInfo},
         bootstrap_framebuffer_loader::{FramebufferInfo},
         bootstrap_command_buffer_loader::{CommandPoolsInfo},
-        bootstrap_sync_objects_loader::{SyncObjectsInfo}
+        bootstrap_sync_objects_loader::{SyncObjectsInfo},
+        bootstrap_descriptor_sets_loader::{DescriptorSetInfo}
     }
 };
 
@@ -38,7 +39,8 @@ pub struct AppData {
     pub pipeline: Option<PipelineInfo>,
     pub framebuffer: Option<FramebufferInfo>,
     pub command_pools: Option<CommandPoolsInfo>,
-    pub sync_objects: Option<SyncObjectsInfo>
+    pub sync_objects: Option<SyncObjectsInfo>,
+    pub descriptor_sets: Option<DescriptorSetInfo>
 }
 
 impl AppData {

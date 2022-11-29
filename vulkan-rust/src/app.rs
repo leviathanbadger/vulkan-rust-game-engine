@@ -260,11 +260,11 @@ impl App {
     }
 
     unsafe fn check_graphics_card(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &AppData, physical_device: vk::PhysicalDevice, request_layers_ptrs: &Vec<*const i8>, request_extensions_ptrs: &Vec<*const i8>) -> Result<()> {
+        //Check for layers and extensions before calling check_physical_device_compatibility. Some bootstrap loaders assume their requested extensions are already confirmed to be present
+        Self::check_physical_device(inst, physical_device, request_layers_ptrs, request_extensions_ptrs, false)?;
+
         let properties = inst.get_physical_device_properties(physical_device);
         let features = inst.get_physical_device_features(physical_device);
-
-        //Check for layers and extensions before calling check_physical_device_compatibility. Some bootstrap loaders assume their requests extension are already confirmed to be present
-        Self::check_physical_device(inst, physical_device, request_layers_ptrs, request_extensions_ptrs, false)?;
 
         for loader in bootstrap_loaders.iter() {
             loader.check_physical_device_compatibility(inst, app_data, physical_device, properties, features)?;
@@ -619,7 +619,7 @@ impl App {
 
         let pipeline = pipeline_info.pipeline;
         let pipeline_layout = pipeline_info.layout;
-        let descriptor_set = self.app_data.uniforms.as_ref().unwrap().descriptor_sets[image_index];
+        let descriptor_set = self.app_data.descriptor_sets.as_ref().unwrap().descriptor_sets[image_index];
 
         unsafe {
             self.device.cmd_begin_render_pass(*command_buffer, &render_pass_info, vk::SubpassContents::INLINE);

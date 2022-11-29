@@ -1,10 +1,16 @@
-use super::{get_memory_type_index};
+use std::io::{Read};
+
+use super::{get_memory_type_index, Buffer};
 use anyhow::{anyhow, Result};
+use png::ColorType;
 use vulkanalia::{
-    prelude::v1_0::*
+    prelude::v1_0::*, vk::{PhysicalDeviceMemoryProperties}
 };
 
-use crate::app_data::{AppData};
+use crate::{
+    app_data::{AppData},
+    bootstrap::bootstrap_command_buffer_loader::{CommandPoolsInfo}
+};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Image2D {
@@ -13,6 +19,7 @@ pub struct Image2D {
     pub image: Option<vk::Image>,
     pub image_memory: Option<vk::DeviceMemory>,
     pub image_view: Option<vk::ImageView>,
+    pub image_sampler: Option<vk::Sampler>,
     initialized: bool,
     owns_image: bool
 }
@@ -25,6 +32,7 @@ impl Default for Image2D {
             image: Default::default(),
             image_memory: Default::default(),
             image_view: Default::default(),
+            image_sampler: Default::default(),
             initialized: false,
             owns_image: true
         }
@@ -72,7 +80,7 @@ impl Image2D {
         self.get_supported_format(inst, app_data, candidates, vk::ImageTiling::OPTIMAL, vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT)
     }
 
-    fn create_image(&mut self, device: &Device, app_data: &AppData, size: vk::Extent2D, format: vk::Format, tiling: vk::ImageTiling, usage_flags: vk::ImageUsageFlags, memory_flags: vk::MemoryPropertyFlags) -> Result<()> {
+    fn create_image(&mut self, device: &Device, memory_properties: &PhysicalDeviceMemoryProperties, size: vk::Extent2D, format: vk::Format, tiling: vk::ImageTiling, usage_flags: vk::ImageUsageFlags, memory_flags: vk::MemoryPropertyFlags) -> Result<()> {
         let image_info = vk::ImageCreateInfo::builder()
             .image_type(vk::ImageType::_2D)
             .extent(vk::Extent3D { width: size.width, height: size.height, depth: 1 })
@@ -92,7 +100,7 @@ impl Image2D {
             requirements = device.get_image_memory_requirements(image);
         }
 
-        let memory_type_index = get_memory_type_index(app_data.memory_properties, memory_flags, requirements)?;
+        let memory_type_index = get_memory_type_index(memory_properties, memory_flags, requirements)?;
         let alloc_info = vk::MemoryAllocateInfo::builder()
             .allocation_size(requirements.size)
             .memory_type_index(memory_type_index);
@@ -140,6 +148,105 @@ impl Image2D {
         Ok(())
     }
 
+    fn create_image_sampler(&mut self, device: &Device) -> Result<()> {
+        let sampler_info = vk::SamplerCreateInfo::builder()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .address_mode_u(vk::SamplerAddressMode::REPEAT)
+            .address_mode_v(vk::SamplerAddressMode::REPEAT)
+            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_BORDER)
+            .anisotropy_enable(true)
+            .max_anisotropy(16.0)
+            .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
+            .unnormalized_coordinates(false)
+            .compare_enable(false)
+            .compare_op(vk::CompareOp::ALWAYS)
+            .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
+            .mip_lod_bias(0.0)
+            .min_lod(0.0)
+            .max_lod(0.0);
+
+        let sampler: vk::Sampler;
+        unsafe {
+            sampler = device.create_sampler(&sampler_info, None)?;
+        }
+
+        self.image_sampler = Some(sampler);
+
+        Ok(())
+    }
+
+    fn transition_image_layout(&self, device: &Device, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout, command_pool_info: &CommandPoolsInfo) -> Result<()> {
+        let subresource = vk::ImageSubresourceRange::builder()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .base_mip_level(0)
+            .level_count(1)
+            .base_array_layer(0)
+            .layer_count(1);
+
+        let (src_access_mask, dst_access_mask, src_stage_mask, dst_stage_mask) = match (old_layout, new_layout) {
+            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (vk::AccessFlags::empty(), vk::AccessFlags::TRANSFER_WRITE, vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::TRANSFER),
+            (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (vk::AccessFlags::TRANSFER_WRITE, vk::AccessFlags::SHADER_READ, vk::PipelineStageFlags::TRANSFER, vk::PipelineStageFlags::FRAGMENT_SHADER),
+            _ => return Err(anyhow!("Unsupported image layout transition"))
+        };
+
+        let barrier = vk::ImageMemoryBarrier::builder()
+            .old_layout(old_layout)
+            .new_layout(new_layout)
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .image(self.image.unwrap())
+            .subresource_range(subresource)
+            .src_access_mask(src_access_mask)
+            .dst_access_mask(dst_access_mask);
+
+        command_pool_info.submit_command_transient_sync(device, |command_buffer| {
+            unsafe {
+                device.cmd_pipeline_barrier(
+                    *command_buffer,
+                    src_stage_mask,
+                    dst_stage_mask,
+                    vk::DependencyFlags::empty(),
+                    &[] as &[vk::MemoryBarrier],
+                    &[] as &[vk::BufferMemoryBarrier],
+                    &[barrier]
+                );
+            }
+
+            Ok(())
+        })?;
+
+        Ok(())
+    }
+
+    fn copy_buffer_to_image(&self, device: &Device, buffer: &Buffer::<u8>, command_pool_info: &CommandPoolsInfo) -> Result<()> {
+        let subresource = vk::ImageSubresourceLayers::builder()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .mip_level(0)
+            .base_array_layer(0)
+            .layer_count(1);
+
+        let extent = self.size.unwrap();
+
+        let region = vk::BufferImageCopy::builder()
+            .buffer_offset(0)
+            .buffer_row_length(0)
+            .buffer_image_height(0)
+            .image_subresource(subresource)
+            .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+            .image_extent(vk::Extent3D { width: extent.width, height: extent.height, depth: 1 });
+
+        command_pool_info.submit_command_transient_sync(device, |command_buffer| {
+            unsafe {
+                device.cmd_copy_buffer_to_image(*command_buffer, buffer.raw_buffer().unwrap(), self.image.unwrap(), vk::ImageLayout::TRANSFER_DST_OPTIMAL, &[region]);
+            }
+
+            Ok(())
+        })?;
+
+        Ok(())
+    }
+
     pub fn format(&self) -> Option<vk::Format> {
         self.format
     }
@@ -178,7 +285,7 @@ impl Image2D {
         let size = app_data.swapchain.as_ref().unwrap().extent;
         self.size = Some(size);
 
-        self.create_image(device, app_data, size, format, vk::ImageTiling::OPTIMAL, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
+        self.create_image(device, &app_data.memory_properties, size, format, vk::ImageTiling::OPTIMAL, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
         self.create_image_view(device, vk::ImageAspectFlags::DEPTH)?;
 
         self.initialized = true;
@@ -210,7 +317,49 @@ impl Image2D {
         Ok(())
     }
 
+    pub fn create_from_png<R: Read>(&mut self, reader: &mut png::Reader<R>, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pool_info: &CommandPoolsInfo) -> Result<()> {
+        let buff_size = reader.info().raw_bytes();
+        let color_type = reader.info().color_type;
+        let mut pixels = vec![0; buff_size];
+        reader.next_frame(&mut pixels)?;
+
+        let format = vk::Format::R8G8B8A8_SRGB;
+        self.format = Some(format);
+
+        let (width, height) = reader.info().size();
+        let size = vk::Extent2D { width, height };
+        self.size = Some(size);
+
+        let mut buffer = Buffer::<u8>::new(vk::BufferUsageFlags::TRANSFER_SRC, buff_size, false);
+        buffer.create(device, memory_properties)?;
+        match color_type {
+            ColorType::Rgba =>  {
+                buffer.set_data(device, &pixels)?;
+            },
+            _ => return Err(anyhow!("Unsupported color type when loading PNG: {:?}", color_type))
+        }
+
+        self.create_image(device, memory_properties, size, format, vk::ImageTiling::OPTIMAL, vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
+
+        self.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL, command_pool_info)?;
+        self.copy_buffer_to_image(device, &buffer, command_pool_info)?;
+        self.transition_image_layout(device, vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL, command_pool_info)?;
+
+        buffer.destroy(device);
+
+        self.create_image_view(device, vk::ImageAspectFlags::COLOR)?;
+        self.create_image_sampler(device)?;
+
+        Ok({})
+    }
+
     pub fn destroy(&mut self, device: &Device) {
+        if let Some(sampler) = self.image_sampler.take() {
+            unsafe {
+                device.destroy_sampler(sampler, None);
+            }
+        }
+
         if let Some(image_view) = self.image_view.take() {
             unsafe {
                 device.destroy_image_view(image_view, None);
@@ -235,5 +384,12 @@ impl Image2D {
         }
 
         self.initialized = false;
+    }
+
+    pub(crate) fn get_descriptor_image_info(&self) -> vk::DescriptorImageInfoBuilder {
+        vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(self.image_view.unwrap())
+            .sampler(self.image_sampler.unwrap())
     }
 }

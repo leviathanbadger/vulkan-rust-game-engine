@@ -25,6 +25,7 @@ pub struct PipelineInfo {
 #[derive(Debug, Default)]
 pub struct BootstrapPipelineLoader { }
 
+//Depends on swapchain, depth buffer, uniforms
 impl BootstrapPipelineLoader {
     pub fn new() -> Self {
         Self::default()

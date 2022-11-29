@@ -55,7 +55,7 @@ impl<TVert, TIndex> GameComponent for RenderModelComponent<TVert, TIndex> where 
 
         let command_pools_info = &app_data.command_pools.as_ref().unwrap();
 
-        self.model.create(device, app_data.memory_properties)?;
+        self.model.create(device, &app_data.memory_properties)?;
         self.model.set_data(device, self.vertices, self.indices)?;
         self.model.submit(device, command_pools_info)?;
 
