@@ -682,13 +682,14 @@ impl App {
 
 //TODO: ignore all window messages after we start shutting down application (don't just warn)
 //TODO: finish refactoring AppData. Maybe change the abstraction completely for some objects
-//TODO: add support for loading and using textures in shaders
+//TODO: dynamically create/update descriptor sets based on materials
+//TODO: improve method of ordering bootstrap loaders so the dependencies aren't handled manually
 //TODO: add support for loading models from OBJ files (rather than hardcoded in-app)
 //TODO: learn to use (and actually use) HDR color space
 //TODO: deprecate static_screen_space shader, or update it to use screen coordinates and support textures/ETC
 //TODO: add asynchronous loading of assets; move asset loading onto other threads (placeholder models/textures if things don't load fast enough)
 //TODO: single location for GPU memory management (allocation/freeing)
-//TODO: create game object abstraction
+//TODO: improve game object abstraction
 //TODO: add support for keyboard/mouse input
 //TODO: render at a lower resolution than the swapchain-created images
 //TODO: determine per-pixel motion vector for use in DLSS2/FSR2/motion blur
