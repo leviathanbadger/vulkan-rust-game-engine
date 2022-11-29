@@ -174,7 +174,7 @@ impl Image2D {
         Ok(())
     }
 
-    fn transition_image_layout(&self, device: &Device, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout, command_pool_info: &CommandPoolsInfo) -> Result<()> {
+    fn transition_image_layout(&self, device: &Device, old_layout: vk::ImageLayout, new_layout: vk::ImageLayout, command_buffer: &vk::CommandBuffer) -> Result<()> {
         let format = self.format.unwrap();
         let aspect_mask: vk::ImageAspectFlags = match new_layout {
             vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL => {
@@ -210,26 +210,22 @@ impl Image2D {
             .src_access_mask(src_access_mask)
             .dst_access_mask(dst_access_mask);
 
-        command_pool_info.submit_command_transient_sync(device, |command_buffer| {
-            unsafe {
-                device.cmd_pipeline_barrier(
-                    *command_buffer,
-                    src_stage_mask,
-                    dst_stage_mask,
-                    vk::DependencyFlags::empty(),
-                    &[] as &[vk::MemoryBarrier],
-                    &[] as &[vk::BufferMemoryBarrier],
-                    &[barrier]
-                );
-            }
-
-            Ok(())
-        })?;
+        unsafe {
+            device.cmd_pipeline_barrier(
+                *command_buffer,
+                src_stage_mask,
+                dst_stage_mask,
+                vk::DependencyFlags::empty(),
+                &[] as &[vk::MemoryBarrier],
+                &[] as &[vk::BufferMemoryBarrier],
+                &[barrier]
+            );
+        }
 
         Ok(())
     }
 
-    fn copy_buffer_to_image(&self, device: &Device, buffer: &Buffer::<u8>, command_pool_info: &CommandPoolsInfo) -> Result<()> {
+    fn copy_buffer_to_image(&self, device: &Device, buffer: &Buffer::<u8>, command_buffer: &vk::CommandBuffer) -> Result<()> {
         let subresource = vk::ImageSubresourceLayers::builder()
             .aspect_mask(vk::ImageAspectFlags::COLOR)
             .mip_level(0)
@@ -246,13 +242,9 @@ impl Image2D {
             .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
             .image_extent(vk::Extent3D { width: extent.width, height: extent.height, depth: 1 });
 
-        command_pool_info.submit_command_transient_sync(device, |command_buffer| {
-            unsafe {
-                device.cmd_copy_buffer_to_image(*command_buffer, buffer.raw_buffer().unwrap(), self.image.unwrap(), vk::ImageLayout::TRANSFER_DST_OPTIMAL, &[region]);
-            }
-
-            Ok(())
-        })?;
+        unsafe {
+            device.cmd_copy_buffer_to_image(*command_buffer, buffer.raw_buffer().unwrap(), self.image.unwrap(), vk::ImageLayout::TRANSFER_DST_OPTIMAL, &[region]);
+        }
 
         Ok(())
     }
@@ -281,7 +273,7 @@ impl Image2D {
         self.image_view
     }
 
-    pub fn create_depth_stencil_buffer(&mut self, inst: &Instance, device: &Device, physical_device: &vk::PhysicalDevice, memory_properties: &PhysicalDeviceMemoryProperties, extent: &vk::Extent2D, command_pools: &CommandPoolsInfo) -> Result<()> {
+    pub fn create_depth_stencil_buffer(&mut self, inst: &Instance, device: &Device, physical_device: &vk::PhysicalDevice, memory_properties: &PhysicalDeviceMemoryProperties, extent: &vk::Extent2D, command_pool_info: &CommandPoolsInfo) -> Result<()> {
         if self.initialized {
             return Err(anyhow!("This image has already been initialized. It can't be created again!"));
         }
@@ -298,7 +290,11 @@ impl Image2D {
         self.create_image(device, memory_properties, size, format, vk::ImageTiling::OPTIMAL, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
         self.create_image_view(device, vk::ImageAspectFlags::DEPTH)?;
 
-        self.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL, command_pools)?;
+        command_pool_info.submit_command_transient_sync(device, |command_buffer| {
+            self.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL, command_buffer)?;
+
+            Ok(())
+        })?;
 
         self.initialized = true;
 
@@ -353,9 +349,13 @@ impl Image2D {
 
         self.create_image(device, memory_properties, size, format, vk::ImageTiling::OPTIMAL, vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
 
-        self.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL, command_pool_info)?;
-        self.copy_buffer_to_image(device, &buffer, command_pool_info)?;
-        self.transition_image_layout(device, vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL, command_pool_info)?;
+        command_pool_info.submit_command_transient_sync(device, |command_buffer| {
+            self.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL, command_buffer)?;
+            self.copy_buffer_to_image(device, &buffer, command_buffer)?;
+            self.transition_image_layout(device, vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL, command_buffer)?;
+
+            Ok(())
+        })?;
 
         buffer.destroy(device);
 

@@ -702,6 +702,7 @@ impl App {
 //TODO: add support for DLSS2
 //TODO: add support for FSR2
 //TODO: add support for fullscreen
+//TODO: make texture loading asynchronous - remove usages of queue_wait_idle in favor of proper synchronization
 //TODO: figure out how to use screen refresh rate
 //TODO: find and integrate 3D physics engine
 //TODO: support rendering text
