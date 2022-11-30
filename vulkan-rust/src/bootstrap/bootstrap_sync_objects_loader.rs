@@ -1,4 +1,4 @@
-use super::{BootstrapLoader};
+use super::{BootstrapLoader, BootstrapSwapchainLoader};
 
 use anyhow::{anyhow, Result};
 use winit::window::{Window};
@@ -7,7 +7,8 @@ use vulkanalia::{
 };
 
 use crate::{
-    app_data::{AppData}
+    app_data::{AppData},
+    bootstrap_loader
 };
 
 #[derive(Debug)]
@@ -55,15 +56,13 @@ impl SyncObjectsInfo {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct BootstrapSyncObjectsLoader { }
-
-//Depends on swapchain
-impl BootstrapSyncObjectsLoader {
-    pub fn new() -> Self {
-        Self::default()
+bootstrap_loader! {
+    pub struct BootstrapSyncObjectsLoader {
+        depends_on(BootstrapSwapchainLoader);
     }
+}
 
+impl BootstrapSyncObjectsLoader {
     fn create_sync_objects(&self, device: &Device, sync_objects_info: &mut SyncObjectsInfo, app_data: &AppData) -> Result<()> {
         let semaphore_info = vk::SemaphoreCreateInfo::builder();
         let fence_info = vk::FenceCreateInfo::builder()

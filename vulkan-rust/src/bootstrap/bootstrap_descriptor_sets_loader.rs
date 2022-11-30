@@ -1,4 +1,4 @@
-use super::{BootstrapLoader};
+use super::{BootstrapLoader, BootstrapUniformLoader, BootstrapCommandBufferLoader};
 use std::{
     mem::{size_of},
     path::{Path},
@@ -15,7 +15,8 @@ use crate::{
     shader_input::{
         uniform_buffer_object::UniformBufferObject
     },
-    buffer::{Image2D}
+    buffer::{Image2D},
+    bootstrap_loader
 };
 
 #[derive(Debug, Default)]
@@ -24,15 +25,13 @@ pub struct DescriptorSetInfo {
     pub descriptor_sets: Vec<vk::DescriptorSet>
 }
 
-#[derive(Debug, Default)]
-pub struct BootstrapDescriptorSetLoader { }
-
-//Depends on uniforms, command pools
-impl BootstrapDescriptorSetLoader {
-    pub fn new() -> Self {
-        Self::default()
+bootstrap_loader! {
+    pub struct BootstrapDescriptorSetLoader {
+        depends_on(BootstrapUniformLoader, BootstrapCommandBufferLoader);
     }
+}
 
+impl BootstrapDescriptorSetLoader {
     fn load_image<P: AsRef<Path>>(&self, path: P, device: &Device, descriptor_sets_info: &mut DescriptorSetInfo, app_data: &AppData) -> Result<()> {
         let image_file = File::open(path)?;
 

@@ -1,4 +1,4 @@
-use super::{BootstrapLoader};
+use super::{BootstrapLoader, BootstrapSwapchainLoader, BootstrapPipelineLoader};
 
 use anyhow::{Result};
 use winit::window::{Window};
@@ -7,7 +7,8 @@ use vulkanalia::{
 };
 
 use crate::{
-    app_data::{AppData}
+    app_data::{AppData},
+    bootstrap_loader
 };
 
 #[derive(Debug, Default)]
@@ -15,15 +16,13 @@ pub struct FramebufferInfo {
     pub framebuffers: Vec<vk::Framebuffer>
 }
 
-#[derive(Debug, Default)]
-pub struct BootstrapFramebufferLoader { }
-
-//Depends on swapchain and pipeline
-impl BootstrapFramebufferLoader {
-    pub fn new() -> Self {
-        Self::default()
+bootstrap_loader! {
+    pub struct BootstrapFramebufferLoader {
+        depends_on(BootstrapSwapchainLoader, BootstrapPipelineLoader);
     }
+}
 
+impl BootstrapFramebufferLoader {
     fn create_framebuffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
         let swapchain_info = app_data.swapchain.as_ref().unwrap();
         let pipeline_info = app_data.pipeline.as_ref().unwrap();

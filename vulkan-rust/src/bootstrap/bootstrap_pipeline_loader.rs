@@ -1,4 +1,4 @@
-use super::{BootstrapLoader};
+use super::{BootstrapLoader, BootstrapSwapchainLoader, BootstrapDepthBufferLoader, BootstrapUniformLoader};
 
 use std::mem::{size_of};
 use anyhow::{anyhow, Result};
@@ -12,7 +12,8 @@ use crate::{
     shader_input::{
         simple::{Vertex},
         push_constants::PushConstants
-    }
+    },
+    bootstrap_loader
 };
 
 #[derive(Debug, Copy, Clone, Default)]
@@ -22,15 +23,13 @@ pub struct PipelineInfo {
     pub pipeline: vk::Pipeline
 }
 
-#[derive(Debug, Default)]
-pub struct BootstrapPipelineLoader { }
-
-//Depends on swapchain, depth buffer, uniforms
-impl BootstrapPipelineLoader {
-    pub fn new() -> Self {
-        Self::default()
+bootstrap_loader! {
+    pub struct BootstrapPipelineLoader {
+        depends_on(BootstrapSwapchainLoader, BootstrapDepthBufferLoader, BootstrapUniformLoader);
     }
+}
 
+impl BootstrapPipelineLoader {
     fn create_shader_module(&self, device: &Device, bytecode: &[u8]) -> Result<vk::ShaderModule> {
         unsafe {
             let bytecode = Vec::<u8>::from(bytecode);

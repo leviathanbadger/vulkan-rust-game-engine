@@ -1,4 +1,4 @@
-use super::{BootstrapLoader};
+use super::{BootstrapLoader, BootstrapSwapchainLoader};
 
 use anyhow::{Result};
 use winit::window::{Window};
@@ -11,7 +11,8 @@ use crate::{
     shader_input::{
         uniform_buffer_object::UniformBufferObject
     },
-    buffer::{Buffer}
+    buffer::{Buffer},
+    bootstrap_loader
 };
 
 #[derive(Debug, Default)]
@@ -21,15 +22,13 @@ pub struct UniformsInfo {
     pub descriptor_pool: vk::DescriptorPool
 }
 
-#[derive(Debug, Default)]
-pub struct BootstrapUniformLoader { }
-
-//Depends on swapchain
-impl BootstrapUniformLoader {
-    pub fn new() -> Self {
-        Self::default()
+bootstrap_loader! {
+    pub struct BootstrapUniformLoader {
+        depends_on(BootstrapSwapchainLoader);
     }
+}
 
+impl BootstrapUniformLoader {
     fn create_descriptor_set_layout(&self, device: &Device, uniforms_info: &mut UniformsInfo) -> Result<()> {
         let ubo_binding = vk::DescriptorSetLayoutBinding::builder()
             .binding(0)

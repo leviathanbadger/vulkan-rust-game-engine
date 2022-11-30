@@ -7,19 +7,16 @@ use vulkanalia::{
 
 use crate::{
     app_data::{AppData},
-    app::{GraphicsCardSuitabilityError}
+    app::{GraphicsCardSuitabilityError},
+    bootstrap_loader
 };
 
-#[derive(Debug, Default)]
-pub struct BootstrapTextureSamplingLoader { }
-
-impl BootstrapTextureSamplingLoader {
-    pub fn new() -> Self {
-        Self::default()
+bootstrap_loader! {
+    pub struct BootstrapTextureSamplingLoader {
+        depends_on();
     }
 }
 
-//Depends on nothing
 impl BootstrapLoader for BootstrapTextureSamplingLoader {
     fn add_required_device_features(&self, features: &mut vk::PhysicalDeviceFeaturesBuilder) -> Result<()> {
         *features = features.sampler_anisotropy(true);

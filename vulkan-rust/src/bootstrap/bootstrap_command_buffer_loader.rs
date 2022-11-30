@@ -1,4 +1,5 @@
-use super::{BootstrapLoader};
+use super::{BootstrapLoader, BootstrapSwapchainLoader};
+
 use std::sync::{Arc};
 use anyhow::{Result};
 use winit::window::{Window};
@@ -7,7 +8,8 @@ use vulkanalia::{
 };
 
 use crate::{
-    app_data::{AppData, VulkanQueueInfo}
+    app_data::{AppData, VulkanQueueInfo},
+    bootstrap_loader
 };
 
 #[derive(Debug)]
@@ -113,15 +115,13 @@ impl CommandPoolsInfo {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct BootstrapCommandBufferLoader { }
-
-//Depends on swapchain
-impl BootstrapCommandBufferLoader {
-    pub fn new() -> Self {
-        Self::default()
+bootstrap_loader! {
+    pub struct BootstrapCommandBufferLoader {
+        depends_on(BootstrapSwapchainLoader);
     }
+}
 
+impl BootstrapCommandBufferLoader {
     fn create_command_pool(&self, device: &Device, flags: vk::CommandPoolCreateFlags, queue_family: u32) -> Result<vk::CommandPool> {
         let command_pool_info = vk::CommandPoolCreateInfo::builder()
             .flags(flags)

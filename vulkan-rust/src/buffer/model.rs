@@ -7,7 +7,7 @@ use vulkanalia::{
 
 use crate::{
     shader_input::push_constants::{PushConstants},
-    bootstrap::bootstrap_command_buffer_loader::{CommandPoolsInfo}
+    bootstrap::{CommandPoolsInfo}
 };
 
 pub trait CanBeIndexBufferType : Copy + Clone + ::std::fmt::Debug {

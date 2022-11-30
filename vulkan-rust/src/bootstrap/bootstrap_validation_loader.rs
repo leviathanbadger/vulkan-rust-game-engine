@@ -8,7 +8,8 @@ use vulkanalia::{
 };
 
 use crate::{
-    app_data::{AppData}
+    app_data::{AppData},
+    bootstrap_loader
 };
 
 const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
@@ -18,12 +19,9 @@ pub struct ValidationInfo {
     pub messenger: vk::DebugUtilsMessengerEXT
 }
 
-#[derive(Debug, Default)]
-pub struct BootstrapValidationLoader { }
-
-impl BootstrapValidationLoader {
-    pub fn new() -> Self {
-        Self::default()
+bootstrap_loader! {
+    pub struct BootstrapValidationLoader {
+        depends_on();
     }
 }
 
@@ -49,7 +47,6 @@ extern "system" fn debug_callback(
     vk::FALSE
 }
 
-//Should be first, if present. Depends on nothing
 impl BootstrapLoader for BootstrapValidationLoader {
     fn add_required_instance_layers(&self, required_layers: &mut Vec<*const i8>) -> Result<()> {
         required_layers.push(VALIDATION_LAYER.as_ptr());

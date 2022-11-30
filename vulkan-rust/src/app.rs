@@ -26,10 +26,7 @@ use vulkanalia::{
 
 use crate::{
     app_data::{AppData, VulkanQueueInfo},
-    bootstrap::{
-        BootstrapLoader,
-        queue_family_indices::QueueFamilyIndices
-    },
+    bootstrap::{BootstrapLoader, QueueFamilyIndices},
     shader_input::{
         uniform_buffer_object::{UniformBufferObject},
         simple::{CUBE_VERTICES, CUBE_INDICES}
@@ -686,9 +683,7 @@ impl App {
     }
 }
 
-//TODO: finish refactoring AppData. Maybe change the abstraction completely for some objects
 //TODO: dynamically create/update descriptor sets based on materials
-//TODO: improve method of ordering bootstrap loaders so the dependencies aren't handled manually
 //TODO: add support for loading models from OBJ files (rather than hardcoded in-app)
 //TODO: learn to use (and actually use) HDR color space
 //TODO: deprecate static_screen_space shader, or update it to use screen coordinates and support textures/ETC

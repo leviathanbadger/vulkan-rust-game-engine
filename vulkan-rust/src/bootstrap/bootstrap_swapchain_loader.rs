@@ -10,7 +10,8 @@ use vulkanalia::{
 use crate::{
     app::{GraphicsCardSuitabilityError},
     app_data::{AppData},
-    buffer::{Image2D}
+    buffer::{Image2D},
+    bootstrap_loader
 };
 
 #[derive(Debug, Default)]
@@ -44,15 +45,13 @@ impl SwapchainSupport {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct BootstrapSwapchainLoader { }
-
-//Depends on nothing
-impl BootstrapSwapchainLoader {
-    pub fn new() -> Self {
-        Self::default()
+bootstrap_loader! {
+    pub struct BootstrapSwapchainLoader {
+        depends_on();
     }
+}
 
+impl BootstrapSwapchainLoader {
     fn choose_surface_format(&self, swapchain_support: &SwapchainSupport) -> Option<vk::SurfaceFormatKHR> {
         let available_formats = &swapchain_support.formats[..];
 

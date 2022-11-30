@@ -8,7 +8,7 @@ use vulkanalia::{
 };
 
 use crate::{
-    bootstrap::bootstrap_command_buffer_loader::{CommandPoolsInfo}
+    bootstrap::{CommandPoolsInfo}
 };
 
 #[derive(Debug, Copy, Clone)]

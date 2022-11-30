@@ -1,19 +1,20 @@
+use std::collections::{HashSet};
 use winit::dpi::{LogicalSize};
-use anyhow::{Result};
+use anyhow::{anyhow, Result};
 use crate::{
     app::App,
     bootstrap::{
         BootstrapLoader,
-        bootstrap_command_buffer_loader::BootstrapCommandBufferLoader,
-        bootstrap_depth_buffer_loader::BootstrapDepthBufferLoader,
-        bootstrap_descriptor_sets_loader::{BootstrapDescriptorSetLoader},
-        bootstrap_framebuffer_loader::BootstrapFramebufferLoader,
-        bootstrap_pipeline_loader::BootstrapPipelineLoader,
-        bootstrap_swapchain_loader::BootstrapSwapchainLoader,
-        bootstrap_sync_objects_loader::BootstrapSyncObjectsLoader,
-        bootstrap_texture_sampling_loader::{BootstrapTextureSamplingLoader},
-        bootstrap_uniform_loader::{BootstrapUniformLoader},
-        bootstrap_validation_loader::{BootstrapValidationLoader},
+        BootstrapCommandBufferLoader,
+        BootstrapDepthBufferLoader,
+        BootstrapDescriptorSetLoader,
+        BootstrapFramebufferLoader,
+        BootstrapPipelineLoader,
+        BootstrapSwapchainLoader,
+        BootstrapSyncObjectsLoader,
+        BootstrapTextureSamplingLoader,
+        BootstrapUniformLoader,
+        BootstrapValidationLoader
     }
 };
 
@@ -34,8 +35,7 @@ impl HasHeapBuilder for App {
 pub struct AppBuilder {
     bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>,
     initial_title: &'static str,
-    default_size: LogicalSize<i32>,
-    add_validation: bool
+    default_size: LogicalSize<i32>
 }
 
 impl<'a> Default for AppBuilder {
@@ -43,8 +43,7 @@ impl<'a> Default for AppBuilder {
         Self {
             bootstrap_loaders: vec![],
             initial_title: "",
-            default_size: LogicalSize::new(300, 300),
-            add_validation: false
+            default_size: LogicalSize::new(300, 300)
         }
     }
 }
@@ -68,10 +67,8 @@ impl AppBuilder {
             .add_bootstrap_loader(Box::new(BootstrapDescriptorSetLoader::new()))
     }
 
-    pub fn add_validation(mut self) -> Self {
-        self.add_validation = true;
-
-        self
+    pub fn add_validation(self) -> Self {
+        self.add_bootstrap_loader(Box::new(BootstrapValidationLoader::new()))
     }
 
     pub fn initial_title(mut self, title: &'static str) -> Self {
@@ -88,10 +85,43 @@ impl AppBuilder {
 
     pub fn build(self) -> Result<App> {
         let mut bootstrap_loaders = self.bootstrap_loaders;
-        if self.add_validation {
-            let validation_loader = Box::new(BootstrapValidationLoader::new());
-            bootstrap_loaders.insert(0, validation_loader);
+        let mut ordered_bootstrap_loaders = vec![];
+        let mut satisfied_dependencies = HashSet::<&str>::new();
+
+        'outer: loop {
+            if bootstrap_loaders.len() == 0 {
+                break;
+            }
+
+            for q in 0..(bootstrap_loaders.len()) {
+                let loader = &bootstrap_loaders[q];
+                let name = loader.dependency_name();
+                if satisfied_dependencies.contains(name) {
+                    return Err(anyhow!("Multiple bootstrap loaders with the same type ({}) detected. Fix your startup script!", name));
+                }
+
+                let dependencies = loader.depends_on();
+                let mut has_unmet_dependencies = false;
+                for dependency in dependencies {
+                    if !satisfied_dependencies.contains(dependency) {
+                        has_unmet_dependencies = true;
+                        break;
+                    }
+                }
+
+                if has_unmet_dependencies {
+                    continue;
+                }
+
+                trace!("Adding bootstrap loader {}...", name);
+                ordered_bootstrap_loaders.push(bootstrap_loaders.remove(q));
+                satisfied_dependencies.insert(name);
+                continue 'outer;
+            }
+
+            return Err(anyhow!("Could not resolve dependencies for the following bootstrap loaders: {:?}", bootstrap_loaders));
         }
-        App::create(self.initial_title, self.default_size, bootstrap_loaders)
+
+        App::create(self.initial_title, self.default_size, ordered_bootstrap_loaders)
     }
 }

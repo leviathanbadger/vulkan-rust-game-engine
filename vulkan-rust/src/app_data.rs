@@ -5,15 +5,15 @@ use vulkanalia::{
 
 use crate::{
     bootstrap::{
-        bootstrap_validation_loader::{ValidationInfo},
-        bootstrap_swapchain_loader::{SwapchainInfo},
-        bootstrap_uniform_loader::{UniformsInfo},
-        bootstrap_depth_buffer_loader::{DepthBufferInfo},
-        bootstrap_pipeline_loader::{PipelineInfo},
-        bootstrap_framebuffer_loader::{FramebufferInfo},
-        bootstrap_command_buffer_loader::{CommandPoolsInfo},
-        bootstrap_sync_objects_loader::{SyncObjectsInfo},
-        bootstrap_descriptor_sets_loader::{DescriptorSetInfo}
+        ValidationInfo,
+        SwapchainInfo,
+        UniformsInfo,
+        DepthBufferInfo,
+        PipelineInfo,
+        FramebufferInfo,
+        CommandPoolsInfo,
+        SyncObjectsInfo,
+        DescriptorSetInfo
     }
 };
 

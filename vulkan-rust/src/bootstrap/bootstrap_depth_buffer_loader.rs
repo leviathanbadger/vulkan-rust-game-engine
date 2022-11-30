@@ -1,4 +1,4 @@
-use super::{BootstrapLoader};
+use super::{BootstrapLoader, BootstrapSwapchainLoader, BootstrapCommandBufferLoader};
 
 use anyhow::{Result};
 use winit::window::{Window};
@@ -8,7 +8,8 @@ use vulkanalia::{
 
 use crate::{
     app_data::{AppData},
-    buffer::{Image2D}
+    buffer::{Image2D},
+    bootstrap_loader
 };
 
 #[derive(Debug, Copy, Clone, Default)]
@@ -22,15 +23,13 @@ impl DepthBufferInfo {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct BootstrapDepthBufferLoader { }
-
-//Depends on swapchain, command pools
-impl BootstrapDepthBufferLoader {
-    pub fn new() -> Self {
-        Self::default()
+bootstrap_loader! {
+    pub struct BootstrapDepthBufferLoader {
+        depends_on(BootstrapSwapchainLoader, BootstrapCommandBufferLoader);
     }
+}
 
+impl BootstrapDepthBufferLoader {
     fn create_depth_objects(&self, inst: &Instance, device: &Device, app_data: &mut AppData) -> Result<()> {
         debug!("Creating depth and stencil buffer objects...");
 

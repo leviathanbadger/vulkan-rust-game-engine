@@ -10,7 +10,7 @@ use vulkanalia::{
     prelude::v1_0::*
 };
 
-use crate::bootstrap::bootstrap_command_buffer_loader::{CommandPoolsInfo};
+use crate::bootstrap::{CommandPoolsInfo};
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Buffer<T> where T : Copy + Clone {
