@@ -1,4 +1,4 @@
-use super::{BootstrapLoader, BootstrapUniformLoader, BootstrapCommandBufferLoader};
+use super::{BootstrapLoader, BootstrapUniformLoader, BootstrapCommandBufferLoader, CommandPoolsInfo};
 use std::{
     mem::{size_of},
     path::{Path},
@@ -21,7 +21,8 @@ use crate::{
 
 #[derive(Debug, Default)]
 pub struct DescriptorSetInfo {
-    pub image: Image2D,
+    pub diffuse: Image2D,
+    pub occlusion_roughness_metallic: Image2D,
     pub descriptor_sets: Vec<vk::DescriptorSet>
 }
 
@@ -32,21 +33,34 @@ bootstrap_loader! {
 }
 
 impl BootstrapDescriptorSetLoader {
-    fn load_image<P: AsRef<Path>>(&self, path: P, device: &Device, descriptor_sets_info: &mut DescriptorSetInfo, app_data: &AppData) -> Result<()> {
+    fn load_image<P: AsRef<Path>>(&self, path: P, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pools_info: &CommandPoolsInfo) -> Result<Image2D> {
         let image_file = File::open(path)?;
 
-        let decoder = png::Decoder::new(image_file);
+        let mut decoder = png::Decoder::new(image_file);
+        decoder.set_ignore_text_chunk(true);
         let mut reader = decoder.read_info()?;
 
         let mut image = Image2D::new();
-        image.create_from_png(&mut reader, device, &app_data.memory_properties, app_data.command_pools.as_ref().unwrap())?;
-        descriptor_sets_info.image = image;
+        image.create_from_png(&mut reader, device, memory_properties, command_pools_info)?;
+
+        Ok(image)
+    }
+
+    fn load_images(&self, device: &Device, descriptor_sets_info: &mut DescriptorSetInfo, app_data: &AppData) -> Result<()> {
+        let memory_properties = &app_data.memory_properties;
+        let command_pools_info = app_data.command_pools.as_ref().unwrap();
+
+        descriptor_sets_info.diffuse = self.load_image("resources/models/die/die_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info)?;
+        // descriptor_sets_info.diffuse = self.load_image("resources/models/viking-room/viking-room.png", device, memory_properties, command_pools_info)?;
+        // descriptor_sets_info.diffuse = self.load_image("resources/models/sphere/sphere_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info)?;
+        descriptor_sets_info.occlusion_roughness_metallic = self.load_image("resources/models/die/die_DefaultMaterial_OcclusionRoughnessMetallic.png", device, memory_properties, command_pools_info)?;
 
         Ok(())
     }
 
-    fn destroy_image(&self, device: &Device, descriptor_sets_info: &mut DescriptorSetInfo) -> () {
-        descriptor_sets_info.image.destroy(device);
+    fn destroy_images(&self, device: &Device, descriptor_sets_info: &mut DescriptorSetInfo) -> () {
+        descriptor_sets_info.diffuse.destroy(device);
+        descriptor_sets_info.occlusion_roughness_metallic.destroy(device);
     }
 
     fn create_descriptor_sets(&self, device: &Device, descriptor_sets_info: &mut DescriptorSetInfo, app_data: &AppData) -> Result<()> {
@@ -79,8 +93,10 @@ impl BootstrapDescriptorSetLoader {
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                 .buffer_info(buffer_info);
 
-            let img_info = descriptor_sets_info.image.get_descriptor_image_info();
-            let image_info = &[img_info];
+            let image_info = &[
+                descriptor_sets_info.diffuse.get_descriptor_image_info(),
+                descriptor_sets_info.occlusion_roughness_metallic.get_descriptor_image_info()
+            ];
             let sampler_write = vk::WriteDescriptorSet::builder()
                 .dst_set(*desc_set)
                 .dst_binding(1)
@@ -103,7 +119,7 @@ impl BootstrapDescriptorSetLoader {
 impl BootstrapLoader for BootstrapDescriptorSetLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
         let mut descriptor_sets_info = DescriptorSetInfo::default();
-        self.load_image("resources/images/crate.png", device, &mut descriptor_sets_info, app_data)?;
+        self.load_images(device, &mut descriptor_sets_info, app_data)?;
         self.create_descriptor_sets(device, &mut descriptor_sets_info, app_data)?;
         app_data.descriptor_sets = Some(descriptor_sets_info);
 
@@ -113,7 +129,7 @@ impl BootstrapLoader for BootstrapDescriptorSetLoader {
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
         if let Some(mut descriptor_sets_info) = app_data.descriptor_sets.take() {
             descriptor_sets_info.descriptor_sets.clear(); //No need to clean these up, apparently
-            self.destroy_image(device, &mut descriptor_sets_info);
+            self.destroy_images(device, &mut descriptor_sets_info);
         }
     }
 

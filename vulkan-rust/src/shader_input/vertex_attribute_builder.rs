@@ -66,7 +66,7 @@ macro_rules! vertex_type {
             #[repr(C)]
             #[derive(Copy, Clone, Debug, Default)]
             pub struct $struct_name {
-                $( $name : $type ),*
+                $( pub(super) $name : $type ),*
             }
 
             lazy_static! {
@@ -90,6 +90,21 @@ macro_rules! vertex_type {
 
                 pub fn attribute_descriptions() -> &'static [vk::VertexInputAttributeDescription] {
                     VERTEX_DESCRIPTIONS_BUILDER.build_attributes()
+                }
+            }
+
+            impl ::std::cmp::PartialEq for $struct_name {
+                fn eq(&self, other: &Self) -> bool {
+                    true $( && self.$name == other.$name )*
+                }
+            }
+
+            impl ::std::cmp::Eq for $struct_name { }
+
+            impl ::core::hash::Hash for $struct_name {
+                fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                    let (_, bytes, _) = unsafe { crate::util::any_as_u8_slice(self).align_to::<u8>() };
+                    bytes.hash(state);
                 }
             }
         }

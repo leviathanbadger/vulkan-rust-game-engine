@@ -29,7 +29,7 @@ use crate::{
     bootstrap::{BootstrapLoader, QueueFamilyIndices},
     shader_input::{
         uniform_buffer_object::{UniformBufferObject},
-        simple::{CUBE_VERTICES, CUBE_INDICES}
+        simple::{Vertex}
     },
     game::{
         has_camera_matrix::{HasCameraMatrix},
@@ -110,12 +110,17 @@ impl App {
 
         let mut scene = Scene::new();
 
-        scene.render_camera.transform.pos = glm::vec3(5.0, 3.0, 5.0);
+        scene.render_camera.transform.pos = glm::vec3(5.0, 5.0, 3.0);
+        // scene.render_camera.transform.pos = glm::vec3(2.0, 2.0, 1.35);
+        // scene.render_camera.transform.pos = glm::vec3(1.0, 1.0, 0.75);
         scene.render_camera.look_at(*ORIGIN);
 
         let mut game_object = Box::new(GameObject::new());
         game_object.add_component(Box::new(RotateOverTimeComponent::new()))?;
-        game_object.add_component(Box::new(RenderModelComponent::new(&*CUBE_VERTICES, &*CUBE_INDICES)?))?;
+        game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/die/die-with-uvs.obj")?))?;
+        // game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/viking-room/viking-room.obj")?))?;
+        // game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/coords/coords.obj")?))?;
+        // game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/sphere/sphere.obj")?))?;
         scene.add_game_object(game_object)?;
 
         Ok(Self {
@@ -684,7 +689,6 @@ impl App {
 }
 
 //TODO: dynamically create/update descriptor sets based on materials
-//TODO: add support for loading models from OBJ files (rather than hardcoded in-app)
 //TODO: learn to use (and actually use) HDR color space
 //TODO: deprecate static_screen_space shader, or update it to use screen coordinates and support textures/ETC
 //TODO: add asynchronous loading of assets; move asset loading onto other threads (placeholder models/textures if things don't load fast enough)

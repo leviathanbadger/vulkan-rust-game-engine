@@ -77,7 +77,7 @@ impl Camera {
 
 impl HasCameraMatrix for Camera {
     fn get_view_matrix(&self) -> Result<glm::DMat4> {
-        self.transform.as_matrix()
+        self.transform.as_matrix_inverse()
     }
 
     fn get_projection_matrix(&self, bounds: vk::Extent2D) -> Result<glm::Mat4> {
@@ -85,8 +85,8 @@ impl HasCameraMatrix for Camera {
             CameraKind::Perspective => {
                 let aspect_ratio = bounds.width as f32 / bounds.height as f32;
                 let fovy = glm::radians(&glm::vec1(self.fovy))[0];
-                glm::perspective_rh_zo(aspect_ratio, fovy, self.near, self.far)
-            }
+                glm::perspective_lh_zo(aspect_ratio, fovy, self.near, self.far)
+            },
             CameraKind::Orthographic => {
                 glm::ortho(-(bounds.width as f32) / 2.0, (bounds.width as f32) / 2.0, -(bounds.height as f32) / 2.0, (bounds.height as f32) / 2.0, self.near, self.far)
             }

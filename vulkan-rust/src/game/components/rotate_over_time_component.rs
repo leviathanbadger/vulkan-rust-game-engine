@@ -46,10 +46,14 @@ impl CanBeEnabled for RotateOverTimeComponent {
 impl GameComponent for RotateOverTimeComponent {
     fn tick(&mut self, frame_info: &FrameInfo, transform: &mut Transform) -> Result<()> {
         self.time += frame_info.current_frame_delta_time.as_secs_f32();
-        self.angle = self.time * -glm::radians(&glm::vec1(90.0))[0]; // Rotate 90 degrees per second
+        self.angle = self.time * glm::radians(&glm::vec1(90.0))[0]; // Rotate 90 degrees per second
 
         let rotate_matrix = glm::rotate(&glm::identity(), self.angle, &*DEFAULT_UP);
         transform.orient = glm::to_quat(&rotate_matrix);
+
+        // transform.pos = glm::vec3(f64::clamp(f64::sin((self.time * 4.0) as f64), 0.0f64, 1.0f64), 0.0, 0.0);
+        // transform.pos = glm::vec3(0.0, f64::clamp(f64::sin((self.time * 4.0) as f64), 0.0f64, 1.0f64), 0.0);
+        // transform.pos = glm::vec3(0.0, 0.0, f64::clamp(f64::sin((self.time * 4.0) as f64), 0.0f64, 1.0f64));
 
         Ok(())
     }

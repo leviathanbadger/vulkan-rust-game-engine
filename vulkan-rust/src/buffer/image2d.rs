@@ -338,14 +338,21 @@ impl Image2D {
         let size = vk::Extent2D { width, height };
         self.size = Some(size);
 
-        let mut buffer = Buffer::<u8>::new(vk::BufferUsageFlags::TRANSFER_SRC, buff_size, false);
-        buffer.create(device, memory_properties)?;
+        let mut buffer: Buffer::<u8>;
         match color_type {
-            ColorType::Rgba =>  {
-                buffer.set_data(device, &pixels)?;
+            ColorType::Rgba => { },
+            ColorType::Rgb => {
+                let expected_pixel_count = size.width * size.height;
+                let mut new_pixels = vec![0; (expected_pixel_count * 4) as usize];
+                self.convert_rgb_to_rgba(&pixels, &mut new_pixels, expected_pixel_count as usize)?;
+                pixels = new_pixels;
             },
             _ => return Err(anyhow!("Unsupported color type when loading PNG: {:?}", color_type))
         }
+
+        buffer = Buffer::new(vk::BufferUsageFlags::TRANSFER_SRC, pixels.len(), false);
+        buffer.create(device, memory_properties)?;
+        buffer.set_data(device, &pixels)?;
 
         self.create_image(device, memory_properties, size, format, vk::ImageTiling::OPTIMAL, vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
 
@@ -363,6 +370,18 @@ impl Image2D {
         self.create_image_sampler(device)?;
 
         Ok({})
+    }
+    pub fn convert_rgb_to_rgba(&self, pixels: &Vec<u8>, new_pixels: &mut Vec<u8>, pixel_count: usize) -> Result<()> {
+        for q in 0..pixel_count {
+            let from = q * 3;
+            let to = q * 4;
+            new_pixels[to + 0] = pixels[from + 0];
+            new_pixels[to + 1] = pixels[from + 1];
+            new_pixels[to + 2] = pixels[from + 2];
+            new_pixels[to + 3] = 255;
+        }
+
+        Ok(())
     }
 
     pub fn destroy(&mut self, device: &Device) {

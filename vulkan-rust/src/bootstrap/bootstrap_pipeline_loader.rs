@@ -125,6 +125,8 @@ impl BootstrapPipelineLoader {
     fn create_pipeline(&self, device: &Device, pipeline_info: &mut PipelineInfo, app_data: &AppData) -> Result<()> {
         let vert = include_bytes!("../../shaders/simple/shader.vert.spv");
         let frag = include_bytes!("../../shaders/simple/shader.frag.spv");
+        // let vert = include_bytes!("../../shaders/simple_no_tex/shader.vert.spv");
+        // let frag = include_bytes!("../../shaders/simple_no_tex/shader.frag.spv");
 
         debug!("Creating vertex and fragment shader modules...");
         let vert_module = self.create_shader_module(device, &vert[..])?;
@@ -175,7 +177,7 @@ impl BootstrapPipelineLoader {
             .polygon_mode(vk::PolygonMode::FILL)
             .line_width(1.0)
             .cull_mode(vk::CullModeFlags::BACK)
-            .front_face(vk::FrontFace::CLOCKWISE)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .depth_bias_enable(false);
 
         let multisample_state = vk::PipelineMultisampleStateCreateInfo::builder()
