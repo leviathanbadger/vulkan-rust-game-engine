@@ -65,9 +65,9 @@ impl<TVert> GameComponent for RenderModelComponent<TVert> where TVert : CanBeVer
         }
     }
 
-    fn render(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, viewmodel: &glm::Mat4) -> Result<()> {
+    fn render(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, viewmodel: &glm::Mat4, normal_viewmodel: Option<&glm::Mat4>) -> Result<()> {
         let model = self.model.as_ref().unwrap();
-        model.write_render_to_command_buffer(device, command_buffer, pipeline_layout, viewmodel)?;
+        model.write_render_to_command_buffer(device, command_buffer, pipeline_layout, viewmodel, normal_viewmodel)?;
 
         Ok(())
     }

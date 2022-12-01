@@ -1,4 +1,5 @@
 pub mod components;
+pub mod lights;
 
 pub mod camera;
 pub mod can_be_enabled;

@@ -36,7 +36,8 @@ use crate::{
         scene::{Scene},
         transform::{ORIGIN},
         game_object::{GameObject},
-        components::{RotateOverTimeComponent, RenderModelComponent}
+        components::{RotateOverTimeComponent, RenderModelComponent},
+        lights::{DirectionalLight}
     },
     frame_info::{FrameInfo}
 };
@@ -108,20 +109,7 @@ impl App {
             loader.after_create_logical_device(&inst, &device, &window, &mut app_data)?;
         }
 
-        let mut scene = Scene::new();
-
-        scene.render_camera.transform.pos = glm::vec3(5.0, 5.0, 3.0);
-        // scene.render_camera.transform.pos = glm::vec3(2.0, 2.0, 1.35);
-        // scene.render_camera.transform.pos = glm::vec3(1.0, 1.0, 0.75);
-        scene.render_camera.look_at(*ORIGIN);
-
-        let mut game_object = Box::new(GameObject::new());
-        game_object.add_component(Box::new(RotateOverTimeComponent::new()))?;
-        game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/die/die-with-uvs.obj")?))?;
-        // game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/viking-room/viking-room.obj")?))?;
-        // game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/coords/coords.obj")?))?;
-        // game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/sphere/sphere.obj")?))?;
-        scene.add_game_object(game_object)?;
+        let scene = Self::create_scene()?;
 
         Ok(Self {
             event_loop: Some(event_loop),
@@ -414,6 +402,29 @@ impl App {
         Ok(())
     }
 
+    fn create_scene() -> Result<Scene> {
+        let mut scene = Scene::new();
+        scene.render_camera.transform.pos = glm::vec3(5.0, 5.0, 3.0);
+        // scene.render_camera.transform.pos = glm::vec3(2.0, 2.0, 1.35);
+        // scene.render_camera.transform.pos = glm::vec3(1.0, 1.0, 0.75);
+        scene.render_camera.look_at(*ORIGIN);
+        scene.ambient_light = glm::vec3(0.1, 0.1, 0.1);
+        scene.directional_light = Some(DirectionalLight {
+            direction: glm::vec3(-1.0, 0.0, -0.3),
+            color: glm::vec3(1.0, 1.0, 1.0),
+        });
+
+        let mut game_object = Box::new(GameObject::new());
+        game_object.add_component(Box::new(RotateOverTimeComponent::new()))?;
+        game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/die/die-with-uvs.obj")?))?;
+        // game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/viking-room/viking-room.obj")?))?;
+        // game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/coords/coords.obj")?))?;
+        // game_object.add_component(Box::new(RenderModelComponent::<Vertex>::new("resources/models/sphere/sphere.obj")?))?;
+        scene.add_game_object(game_object)?;
+
+        Ok(scene)
+    }
+
     //Deliberately not a ref, because the run method needs to own "self"
     pub fn run(mut self) -> ! {
         let mut minimized = false;
@@ -583,13 +594,24 @@ impl App {
 
     fn update_uniform_buffer(&mut self, image_index: usize) -> Result<()> {
         let extent = self.app_data.swapchain.as_ref().unwrap().extent;
-        let projection = self.scene.render_camera.get_projection_matrix(extent)?;
+        let camera = &mut self.scene.render_camera;
+        let projection = camera.get_projection_matrix(extent)?;
+        let view = camera.get_view_matrix()?;
 
         let buffer = &mut self.app_data.uniforms.as_mut().unwrap().uniform_buffers[image_index];
+
+        let directional_light = self.scene.directional_light.unwrap_or_default();
+        let normal_matrix = glm::convert::<glm::DMat4, glm::Mat4>(glm::transpose(&glm::inverse(&view)));
+        let actual_direction: glm::Vec3 = (normal_matrix * glm::vec4(directional_light.direction.x, directional_light.direction.y, directional_light.direction.z, 0.0)).xyz();
+
         let ubo = UniformBufferObject {
             proj: projection,
+            ambient_light: self.scene.ambient_light,
+            directional_light_color: directional_light.color,
+            directional_light_direction: actual_direction,
             frame_index: self.frame_info.current_frame_index,
-            time_in_seconds: self.frame_info.current_frame_delta_time.as_secs_f32()
+            time_in_seconds: self.frame_info.current_frame_delta_time.as_secs_f32(),
+            ..Default::default() //Necessary for the manual padding
         };
         buffer.set_data(&self.device, &ubo)?;
 
@@ -688,6 +710,7 @@ impl App {
     }
 }
 
+//TODO: infer normal from face if none exists per vertex
 //TODO: dynamically create/update descriptor sets based on materials
 //TODO: learn to use (and actually use) HDR color space
 //TODO: deprecate static_screen_space shader, or update it to use screen coordinates and support textures/ETC
@@ -706,4 +729,4 @@ impl App {
 //TODO: find and integrate 3D physics engine
 //TODO: support rendering text
 //TODO: look into ray tracing
-//TODO: add support for light sources in shaders
+//TODO: add support for in-scene light sources in shaders

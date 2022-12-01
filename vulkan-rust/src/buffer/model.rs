@@ -84,10 +84,11 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
                     // let pos = glm::vec3(mesh.positions[pos_offset + 1], mesh.positions[pos_offset + 0], mesh.positions[pos_offset + 2]);
 
                     let normal_offset = (mesh_index * 3) as usize;
-                    let normal = if normal_offset + 3 > mesh.vertex_color.len() {
+                    let normal = if normal_offset + 3 > mesh.normals.len() {
                         None
                     } else {
-                        Some(glm::vec3(mesh.normals[normal_offset], mesh.normals[normal_offset + 1], mesh.normals[normal_offset + 2]))
+                        Some(glm::vec3(mesh.normals[normal_offset], mesh.normals[normal_offset + 2], mesh.normals[normal_offset + 1])) //Swap Y and Z - this engine uses Z as the up direction, but assets are created with Y as the up direction
+                        // Some(glm::vec3(mesh.normals[pos_offset + 1], mesh.normals[pos_offset + 0], mesh.normals[pos_offset + 2])
                     };
 
                     let color_offset = (mesh_index * 3) as usize;
@@ -182,7 +183,7 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
         Ok(())
     }
 
-    pub fn write_render_to_command_buffer(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, viewmodel: &glm::Mat4) -> Result<()> {
+    pub fn write_render_to_command_buffer(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, viewmodel: &glm::Mat4, normal_viewmodel: Option<&glm::Mat4>) -> Result<()> {
         unsafe {
             let vertex_buffer = self.vertex_buffer.raw_buffer().ok_or_else(|| anyhow!("Could not unwrap vertex buffer. Has this model been initialized?"))?;
             device.cmd_bind_vertex_buffers(*command_buffer, 0, &[vertex_buffer], &[0]);
@@ -200,8 +201,11 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
                 return Err(anyhow!("No index buffer to unwrap for render... WTF?"));
             }
 
+            let normal_viewmodel: glm::Mat4 = if let Some(nm_vm) = normal_viewmodel { *nm_vm } else { glm::transpose(&glm::inverse(viewmodel)) };
+
             let push_constants = PushConstants {
-                viewmodel: *viewmodel
+                viewmodel: *viewmodel,
+                normal_viewmodel
             };
             let push_constants_bytes = push_constants.as_bytes();
             device.cmd_push_constants(*command_buffer, *pipeline_layout, vk::ShaderStageFlags::ALL_GRAPHICS, 0, push_constants_bytes);

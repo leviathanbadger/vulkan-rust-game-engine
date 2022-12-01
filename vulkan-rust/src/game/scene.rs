@@ -1,6 +1,8 @@
 use super::{
     camera::{Camera, HasCameraMatrix},
-    game_object::{GameObject}, can_be_enabled::CanBeEnabled
+    game_object::{GameObject},
+    can_be_enabled::{CanBeEnabled},
+    lights::{DirectionalLight}
 };
 
 use nalgebra_glm as glm;
@@ -18,6 +20,8 @@ use crate::{
 pub struct Scene {
     pub render_camera: Camera,
     pub clear_color: glm::Vec3,
+    pub ambient_light: glm::Vec3,
+    pub directional_light: Option<DirectionalLight>,
     objects: Vec<Box<GameObject>>
 }
 
