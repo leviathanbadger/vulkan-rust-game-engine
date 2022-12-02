@@ -4,6 +4,7 @@ use nalgebra_glm as glm;
 #[derive(Copy, Clone, Debug, Default)]
 pub struct UniformBufferObject {
     pub proj: glm::Mat4,
+    pub previous_proj: glm::Mat4,
 
     pub ambient_light: glm::Vec3,
     #[doc(hidden)]

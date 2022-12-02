@@ -19,7 +19,8 @@ use crate::{
 pub struct GameObject {
     enabled: bool,
     components: Vec<Box<dyn GameComponent>>,
-    pub transform: Transform
+    pub transform: Transform,
+    previous_viewmodel: Option<glm::Mat4>
 }
 
 impl Default for GameObject {
@@ -27,7 +28,8 @@ impl Default for GameObject {
         Self {
             enabled: true,
             components: Default::default(),
-            transform: Default::default()
+            transform: Default::default(),
+            previous_viewmodel: Default::default()
         }
     }
 }
@@ -85,9 +87,17 @@ impl GameObject {
 
         for component in self.components.iter() {
             if component.is_enabled() {
-                component.render(device, command_buffer, pipeline_layout, &viewmodel, Some(&normal_viewmodel))?;
+                component.render(device, command_buffer, pipeline_layout, &viewmodel, Some(&normal_viewmodel), self.previous_viewmodel.as_ref())?;
             }
         }
+
+        Ok(())
+    }
+
+    pub fn end_frame(&mut self, view: &glm::DMat4) -> Result<()> {
+        let model = self.transform.as_matrix()?;
+        let viewmodel = glm::convert::<glm::DMat4, glm::Mat4>(view * model);
+        self.previous_viewmodel = Some(viewmodel);
 
         Ok(())
     }

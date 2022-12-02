@@ -183,7 +183,7 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
         Ok(())
     }
 
-    pub fn write_render_to_command_buffer(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, viewmodel: &glm::Mat4, normal_viewmodel: Option<&glm::Mat4>) -> Result<()> {
+    pub fn write_render_to_command_buffer(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, viewmodel: &glm::Mat4, normal_viewmodel: Option<&glm::Mat4>, previous_viewmodel: Option<&glm::Mat4>) -> Result<()> {
         unsafe {
             let vertex_buffer = self.vertex_buffer.raw_buffer().ok_or_else(|| anyhow!("Could not unwrap vertex buffer. Has this model been initialized?"))?;
             device.cmd_bind_vertex_buffers(*command_buffer, 0, &[vertex_buffer], &[0]);
@@ -202,10 +202,12 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
             }
 
             let normal_viewmodel: glm::Mat4 = if let Some(nm_vm) = normal_viewmodel { *nm_vm } else { glm::transpose(&glm::inverse(viewmodel)) };
+            let previous_viewmodel: glm::Mat4 = if let Some(prev_vm) = previous_viewmodel { *prev_vm } else { *viewmodel };
 
             let push_constants = PushConstants {
                 viewmodel: *viewmodel,
-                normal_viewmodel
+                normal_viewmodel,
+                previous_viewmodel
             };
             let push_constants_bytes = push_constants.as_bytes();
             device.cmd_push_constants(*command_buffer, *pipeline_layout, vk::ShaderStageFlags::ALL_GRAPHICS, 0, push_constants_bytes);

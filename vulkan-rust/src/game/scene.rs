@@ -73,4 +73,17 @@ impl Scene {
 
         Ok(())
     }
+
+    pub fn end_frame(&mut self, bounds: vk::Extent2D) -> Result<()> {
+        self.render_camera.end_frame(bounds)?;
+        let view = self.render_camera.get_previous_view_matrix().unwrap();
+
+        for obj in self.objects.iter_mut() {
+            if obj.is_enabled() {
+                obj.end_frame(&view)?;
+            }
+        }
+
+        Ok(())
+    }
 }

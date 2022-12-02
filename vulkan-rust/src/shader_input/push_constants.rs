@@ -6,7 +6,8 @@ use crate::util::{any_as_u8_slice};
 #[derive(Copy, Clone, Debug, Default)]
 pub struct PushConstants {
     pub viewmodel: glm::Mat4,
-    pub normal_viewmodel: glm::Mat4
+    pub normal_viewmodel: glm::Mat4,
+    pub previous_viewmodel: glm::Mat4
 }
 
 impl PushConstants {

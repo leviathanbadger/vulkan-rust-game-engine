@@ -22,7 +22,10 @@ pub struct Camera {
     near: f32,
     far: f32,
     kind: CameraKind,
-    fovy: f32
+    fovy: f32,
+
+    previous_proj: Option<glm::Mat4>,
+    previous_view: Option<glm::DMat4>
 }
 
 impl Default for Camera {
@@ -32,7 +35,10 @@ impl Default for Camera {
             near: 0.001,
             far: 1000.0,
             kind: Default::default(),
-            fovy: 45.0
+            fovy: 45.0,
+
+            previous_proj: Default::default(),
+            previous_view: Default::default()
         }
     }
 }
@@ -72,6 +78,21 @@ impl Camera {
     }
     pub fn set_fovy(&mut self, fovy: f32) -> () {
         self.fovy = fovy;
+    }
+
+    pub fn end_frame(&mut self, bounds: vk::Extent2D) -> Result<()> {
+        self.previous_view = Some(self.get_view_matrix()?);
+        self.previous_proj = Some(self.get_projection_matrix(bounds)?);
+
+        Ok(())
+    }
+
+    pub fn get_previous_projection_matrix(&self) -> Option<&glm::Mat4> {
+        self.previous_proj.as_ref()
+    }
+
+    pub fn get_previous_view_matrix(&self) -> Option<&glm::DMat4> {
+        self.previous_view.as_ref()
     }
 }
 

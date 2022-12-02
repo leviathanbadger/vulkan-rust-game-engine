@@ -501,6 +501,8 @@ impl App {
             self.scene.load_and_unload(&self.device, &self.app_data)?;
 
             self.render()?;
+            let bounds = self.app_data.swapchain.as_ref().unwrap().extent;
+            self.scene.end_frame(bounds)?;
             self.frame_info.current_frame_index += 1;
         }
 
@@ -606,6 +608,7 @@ impl App {
 
         let ubo = UniformBufferObject {
             proj: projection,
+            previous_proj: *camera.get_previous_projection_matrix().unwrap_or(&projection),
             ambient_light: self.scene.ambient_light,
             directional_light_color: directional_light.color,
             directional_light_direction: actual_direction,
@@ -719,7 +722,6 @@ impl App {
 //TODO: improve game object abstraction
 //TODO: add support for keyboard/mouse input
 //TODO: render at a lower resolution than the swapchain-created images
-//TODO: determine per-pixel motion vector for use in DLSS2/FSR2/motion blur
 //TODO: attach motion vector image to framebuffer for use in DLSS2/FSR2/motion blur
 //TODO: add support for DLSS2
 //TODO: add support for FSR2
