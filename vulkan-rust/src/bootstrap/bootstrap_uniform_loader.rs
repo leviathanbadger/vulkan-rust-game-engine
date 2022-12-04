@@ -59,7 +59,13 @@ impl BootstrapUniformLoader {
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS);
 
-        let bindings = &[sampler_binding];
+        let motion_vector_sampler_binding = vk::DescriptorSetLayoutBinding::builder()
+            .binding(1)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS);
+
+        let bindings = &[sampler_binding, motion_vector_sampler_binding];
         let dsl_info = vk::DescriptorSetLayoutCreateInfo::builder()
             .bindings(bindings);
 
@@ -141,7 +147,11 @@ impl BootstrapUniformLoader {
             .type_(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .descriptor_count(image_count);
 
-        let pool_sizes = &[sampler_size];
+        let motion_vector_sampler_size = vk::DescriptorPoolSize::builder()
+            .type_(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(image_count);
+
+        let pool_sizes = &[sampler_size, motion_vector_sampler_size];
         let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
             .pool_sizes(pool_sizes)
             .max_sets(image_count);

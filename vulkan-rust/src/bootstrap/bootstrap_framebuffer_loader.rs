@@ -39,8 +39,9 @@ impl BootstrapFramebufferLoader {
         let base_render_framebuffers = (0..image_count)
             .map(|q| {
                 let render_image_view = unsafe { depth_buffer_info.base_render_images[q as usize].raw_image_view().unwrap() };
+                let motion_vector_image_view = unsafe { depth_buffer_info.motion_vector_buffers[q as usize].raw_image_view().unwrap() };
                 let depth_stencil_image_view = unsafe { depth_buffer_info.depth_stencil_buffers[q as usize].raw_image_view().unwrap() };
-                let attachments = &[render_image_view, depth_stencil_image_view];
+                let attachments = &[render_image_view, motion_vector_image_view, depth_stencil_image_view];
                 let extent = render_extent;
                 let framebuffer_info = vk::FramebufferCreateInfo::builder()
                     .render_pass(pipeline_info.base_render_pass)

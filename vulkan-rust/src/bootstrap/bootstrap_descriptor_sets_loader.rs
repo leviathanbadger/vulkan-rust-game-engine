@@ -113,13 +113,13 @@ impl BootstrapDescriptorSetLoader {
 
         Ok(desc_sets)
     }
-    fn create_postprocessing_descriptor_sets(&self, device: &Device, count: u32, layout: vk::DescriptorSetLayout, desc_pool: vk::DescriptorPool, base_render_images: &Vec<Image2D>, descriptor_sets_info: &DescriptorSetInfo) -> Result<Vec<vk::DescriptorSet>> {
+    fn create_postprocessing_descriptor_sets(&self, device: &Device, count: u32, layout: vk::DescriptorSetLayout, desc_pool: vk::DescriptorPool, base_render_images: &Vec<Image2D>, motion_vector_images: &Vec<Image2D>) -> Result<Vec<vk::DescriptorSet>> {
         let desc_sets = self.allocate_descriptor_sets(device, count, layout, desc_pool)?;
 
         for (q, desc_set) in desc_sets.iter().enumerate() {
             let image_info = &[
-                base_render_images[q].get_descriptor_image_info()
-                // descriptor_sets_info.diffuse.get_descriptor_image_info()
+                base_render_images[q].get_descriptor_image_info(),
+                motion_vector_images[q].get_descriptor_image_info()
             ];
             let sampler_write = vk::WriteDescriptorSet::builder()
                 .dst_set(*desc_set)
@@ -142,7 +142,7 @@ impl BootstrapDescriptorSetLoader {
 
         debug!("Allocating descriptor sets...");
         descriptor_sets_info.base_descriptor_sets = self.create_base_descriptor_sets(device, image_count, uniforms_info.base_descriptor_set_layout, uniforms_info.base_descriptor_pool, &uniforms_info.uniform_buffers, descriptor_sets_info)?;
-        descriptor_sets_info.postprocessing_descriptor_sets = self.create_postprocessing_descriptor_sets(device, image_count, uniforms_info.postprocessing_descriptor_set_layout, uniforms_info.postprocessing_descriptor_pool, &depth_buffer_info.base_render_images, descriptor_sets_info)?;
+        descriptor_sets_info.postprocessing_descriptor_sets = self.create_postprocessing_descriptor_sets(device, image_count, uniforms_info.postprocessing_descriptor_set_layout, uniforms_info.postprocessing_descriptor_pool, &depth_buffer_info.base_render_images, &depth_buffer_info.motion_vector_buffers)?;
         debug!("Descriptor sets allocated: {:?}", descriptor_sets_info.base_descriptor_sets);
 
         Ok(())

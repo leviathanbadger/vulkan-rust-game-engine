@@ -439,7 +439,7 @@ impl App {
         event_loop.run(move |event, _, control_flow| {
             if self.destroying {
                 *control_flow = ControlFlow::Exit;
-                warn!("Window message received after shutdown began: {:?}", event);
+                debug!("Window message received after shutdown began: {:?}", event);
                 return ();
             }
 
@@ -641,6 +641,11 @@ impl App {
                 float32: [clear_color[0], clear_color[1], clear_color[2], 1.0]
             }
         };
+        let motion_clear_value = vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [0.0, 0.0, 0.0, 1.0]
+            }
+        };
         let depth_clear_value = vk::ClearValue {
             depth_stencil: vk::ClearDepthStencilValue {
                 depth: 1.0,
@@ -648,7 +653,7 @@ impl App {
             }
         };
 
-        let base_render_clear_values = &[color_clear_value, depth_clear_value];
+        let base_render_clear_values = &[color_clear_value, motion_clear_value, depth_clear_value];
         let base_render_pass_info = vk::RenderPassBeginInfo::builder()
             .render_pass(pipeline_info.base_render_pass)
             .framebuffer(framebuffer_info.base_render_framebuffers[image_index])
@@ -755,7 +760,6 @@ impl App {
 }
 
 //TODO: render at a lower resolution than the swapchain-created images
-//TODO: attach motion vector image to framebuffer for use in DLSS2/FSR2/motion blur
 //TODO: only create one sampler resource, not one per image
 //TODO: when loading OBJ files, infer vertex normal from face if none exists per vertex
 //TODO: use bindless rendering to support multiple textures

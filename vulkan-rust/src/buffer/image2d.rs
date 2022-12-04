@@ -11,6 +11,11 @@ use crate::{
     bootstrap::{CommandPoolsInfo}
 };
 
+pub enum AttachmentKind {
+    Color,
+    Depth
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Image2D {
     pub format: Option<vk::Format>,
@@ -65,7 +70,7 @@ impl Image2D {
             }
         }
 
-        Err(anyhow!("Failed to find a supported format for depth/stencil buffer"))
+        Err(anyhow!("Failed to find a supported format"))
     }
 
     unsafe fn choose_depth_stencil_format(inst: &Instance, physical_device: &vk::PhysicalDevice) -> Result<vk::Format> {
@@ -76,6 +81,16 @@ impl Image2D {
         ];
 
         Self::get_supported_format(inst, physical_device, candidates, vk::ImageTiling::OPTIMAL, vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT)
+    }
+    unsafe fn choose_motion_vector_format(inst: &Instance, physical_device: &vk::PhysicalDevice) -> Result<vk::Format> {
+        let candidates = &[
+            vk::Format::R16G16_SFLOAT,
+            vk::Format::R16G16B16A16_SFLOAT,
+            // vk::Format::R32G32_SFLOAT,
+            // vk::Format::R32G32B32A32_SFLOAT
+        ];
+
+        Self::get_supported_format(inst, physical_device, candidates, vk::ImageTiling::OPTIMAL, vk::FormatFeatureFlags::COLOR_ATTACHMENT)
     }
 
     fn create_image(&mut self, device: &Device, memory_properties: &PhysicalDeviceMemoryProperties, size: vk::Extent2D, format: vk::Format, tiling: vk::ImageTiling, usage_flags: vk::ImageUsageFlags, memory_flags: vk::MemoryPropertyFlags) -> Result<()> {
@@ -274,7 +289,7 @@ impl Image2D {
         self.image_view
     }
 
-    fn create_depth_stencil_buffer(&mut self, device: &Device, memory_properties: &PhysicalDeviceMemoryProperties, format: vk::Format, extent: &vk::Extent2D) -> Result<()> {
+    fn create_attachment_buffer(&mut self, device: &Device, memory_properties: &PhysicalDeviceMemoryProperties, format: vk::Format, extent: &vk::Extent2D, attachment_kind: AttachmentKind, sampled: bool) -> Result<()> {
         if self.initialized {
             return Err(anyhow!("This image has already been initialized. It can't be created again!"));
         }
@@ -287,20 +302,35 @@ impl Image2D {
         let size = *extent;
         self.size = Some(size);
 
-        self.create_image(device, memory_properties, size, format, vk::ImageTiling::OPTIMAL, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
-        self.create_image_view(device, vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL)?;
+        let mut usage_flags: vk::ImageUsageFlags;
+        let aspect_flags: vk::ImageAspectFlags;
+        (usage_flags, aspect_flags) = match attachment_kind {
+            AttachmentKind::Color => (vk::ImageUsageFlags::COLOR_ATTACHMENT, vk::ImageAspectFlags::COLOR),
+            AttachmentKind::Depth => (vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT, vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL)
+        };
+        if sampled {
+            usage_flags |= vk::ImageUsageFlags::SAMPLED;
+        }
+
+        self.create_image(device, memory_properties, size, format, vk::ImageTiling::OPTIMAL, usage_flags, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
+        self.create_image_view(device, aspect_flags)?;
+
+        if sampled {
+            self.create_image_sampler(device)?;
+        }
 
         self.initialized = true;
 
         Ok(())
     }
-    pub fn new_and_create_depth_stencil_buffers(image_count: u32, inst: &Instance, device: &Device, physical_device: &vk::PhysicalDevice, memory_properties: &PhysicalDeviceMemoryProperties, extent: &vk::Extent2D, command_pool_info: &CommandPoolsInfo) -> Result<Vec<Self>> {
+
+    pub fn new_and_create_depth_stencil_buffers(image_count: u32, inst: &Instance, device: &Device, physical_device: &vk::PhysicalDevice, memory_properties: &PhysicalDeviceMemoryProperties, extent: &vk::Extent2D, sampled: bool, command_pool_info: &CommandPoolsInfo) -> Result<Vec<Self>> {
         let format = unsafe { Self::choose_depth_stencil_format(inst, physical_device)? };
 
         let depth_stencil_buffers = (0..image_count)
             .map(|_| -> Result<Self> {
                 let mut image = Image2D::new();
-                image.create_depth_stencil_buffer(device, memory_properties, format, extent)?;
+                image.create_attachment_buffer(device, memory_properties, format, extent, AttachmentKind::Depth, sampled)?;
 
                 Ok(image)
             })
@@ -317,53 +347,49 @@ impl Image2D {
 
         Ok(depth_stencil_buffers)
     }
-
-    fn create_render_image(&mut self, device: &Device, memory_properties: &PhysicalDeviceMemoryProperties, format: vk::Format, extent: &vk::Extent2D, sampled: bool) -> Result<()> {
-        if self.initialized {
-            return Err(anyhow!("This image has already been initialized. It can't be created again!"));
-        }
-        if !self.owns_image {
-            return Err(anyhow!("This Image2D was constructed with a passed-in vk::Image. It can't be created in a way that creates a new vk::Image."));
-        }
-
-        self.format = Some(format);
-
-        let size = *extent;
-        self.size = Some(size);
-
-        let mut usage_flags = vk::ImageUsageFlags::COLOR_ATTACHMENT;
-        if sampled {
-            usage_flags |= vk::ImageUsageFlags::SAMPLED;
-        }
-        self.create_image(device, memory_properties, size, format, vk::ImageTiling::OPTIMAL, usage_flags, vk::MemoryPropertyFlags::DEVICE_LOCAL)?;
-        self.create_image_view(device, vk::ImageAspectFlags::COLOR)?;
-
-        self.create_image_sampler(device)?;
-
-        self.initialized = true;
-
-        Ok(())
-    }
     pub fn new_and_create_render_images(image_count: u32, device: &Device, memory_properties: &PhysicalDeviceMemoryProperties, format: vk::Format, extent: &vk::Extent2D, sampled: bool, command_pool_info: &CommandPoolsInfo) -> Result<Vec<Self>> {
         let render_images = (0..image_count)
             .map(|_| -> Result<Self> {
                 let mut image = Image2D::new();
-                image.create_render_image(device, memory_properties, format, extent, sampled)?;
+                image.create_attachment_buffer(device, memory_properties, format, extent, AttachmentKind::Color, sampled)?;
 
                 Ok(image)
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let render_images_ref = &render_images;
-        command_pool_info.submit_command_transient_sync(device, |command_buffer| {
-            for render_image in render_images_ref {
-                render_image.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, command_buffer)?;
-            }
+        // let render_images_ref = &render_images;
+        // command_pool_info.submit_command_transient_sync(device, |command_buffer| {
+        //     for render_image in render_images_ref {
+        //         render_image.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, command_buffer)?;
+        //     }
 
-            Ok(())
-        })?;
+        //     Ok(())
+        // })?;
 
         Ok(render_images)
+    }
+    pub fn new_and_create_motion_vector_buffers(image_count: u32, inst: &Instance, device: &Device, physical_device: &vk::PhysicalDevice, memory_properties: &PhysicalDeviceMemoryProperties, extent: &vk::Extent2D, sampled: bool, command_pool_info: &CommandPoolsInfo) -> Result<Vec<Self>> {
+        let format = unsafe { Self::choose_motion_vector_format(inst, physical_device)? };
+
+        let motion_vector_buffers = (0..image_count)
+            .map(|_| -> Result<Self> {
+                let mut image = Image2D::new();
+                image.create_attachment_buffer(device, memory_properties, format, extent, AttachmentKind::Color, sampled)?;
+
+                Ok(image)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // let motion_buffers_ref = &motion_vector_buffers;
+        // command_pool_info.submit_command_transient_sync(device, |command_buffer| {
+        //     for depth_stencil_buffer in motion_buffers_ref {
+        //         depth_stencil_buffer.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, command_buffer)?;
+        //     }
+
+        //     Ok(())
+        // })?;
+
+        Ok(motion_vector_buffers)
     }
 
     pub fn create_from_swapchain_images(swapchain_images: &[vk::Image], format: vk::Format, size: vk::Extent2D, device: &Device) -> Result<Vec<Image2D>> {

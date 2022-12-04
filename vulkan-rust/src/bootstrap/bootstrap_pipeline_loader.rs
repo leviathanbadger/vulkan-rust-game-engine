@@ -20,7 +20,8 @@ use crate::{
         push_constants::{PushConstants},
         vertex_attribute_builder::{HasVertexAttributeBindings}
     },
-    bootstrap_loader
+    bootstrap_loader,
+    app::{GraphicsCardSuitabilityError}
 };
 
 #[derive(Debug)]
@@ -73,6 +74,37 @@ impl Default for AttachmentDescriptor {
             initial_layout: vk::ImageLayout::UNDEFINED,
             ref_layout: None,
             final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct BlendStateDescriptor {
+    components: vk::ColorComponentFlags,
+
+    enable_blend: bool,
+
+    src_color_blend_factor: vk::BlendFactor,
+    dst_color_blend_factor: vk::BlendFactor,
+    color_blend_op: vk::BlendOp,
+    src_alpha_blend_factor: vk::BlendFactor,
+    dst_alpha_blend_factor: vk::BlendFactor,
+    alpha_blend_op: vk::BlendOp
+}
+
+impl Default for BlendStateDescriptor {
+    fn default() -> Self {
+        Self {
+            components: vk::ColorComponentFlags::all(),
+
+            enable_blend: false,
+
+            src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
+            dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+            color_blend_op: vk::BlendOp::ADD,
+            src_alpha_blend_factor: vk::BlendFactor::ONE,
+            dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+            alpha_blend_op: vk::BlendOp::ADD
         }
     }
 }
@@ -210,12 +242,21 @@ impl BootstrapPipelineLoader {
         debug!("Creating render passes...");
 
         let swapchain_format = app_data.swapchain.as_ref().unwrap().surface_format.format;
-        let depth_buffer_format = app_data.depth_buffer.as_ref().unwrap().depth_stencil_format();
+        let depth_buffer_info = &app_data.depth_buffer.as_ref().unwrap();
+        let depth_buffer_format = depth_buffer_info.depth_stencil_format();
+        let motion_vector_format = depth_buffer_info.motion_vector_format();
 
         let attachments = &[
             AttachmentDescriptor {
                 format: swapchain_format,
-                final_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                ref_layout: Some(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+                final_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                ..Default::default()
+            },
+            AttachmentDescriptor {
+                format: motion_vector_format,
+                ref_layout: Some(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+                final_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                 ..Default::default()
             },
             AttachmentDescriptor {
@@ -268,7 +309,7 @@ impl BootstrapPipelineLoader {
         }
     }
 
-    fn create_pipeline<TVert: HasVertexAttributeBindings>(&self, mut vertex_shader_source: ShaderSource, mut fragment_shader_source: ShaderSource, device: &Device, extent: vk::Extent2D, layout: vk::PipelineLayout, render_pass: vk::RenderPass, use_depth_buffer: bool) -> Result<vk::Pipeline> {
+    fn create_pipeline<TVert: HasVertexAttributeBindings>(&self, mut vertex_shader_source: ShaderSource, mut fragment_shader_source: ShaderSource, device: &Device, extent: vk::Extent2D, layout: vk::PipelineLayout, render_pass: vk::RenderPass, blend_state_descriptors: &[BlendStateDescriptor], use_depth_buffer: bool) -> Result<vk::Pipeline> {
         vertex_shader_source = vertex_shader_source.flatten()?;
         let (vert, vert_entry_name) = vertex_shader_source.get_source()?;
         fragment_shader_source = fragment_shader_source.flatten()?;
@@ -333,21 +374,25 @@ impl BootstrapPipelineLoader {
             .sample_shading_enable(false)
             .rasterization_samples(vk::SampleCountFlags::_1);
 
-        let attachment = vk::PipelineColorBlendAttachmentState::builder()
-            .color_write_mask(vk::ColorComponentFlags::all())
-            .blend_enable(false)
-            .src_color_blend_factor(vk::BlendFactor::ONE)
-            .dst_color_blend_factor(vk::BlendFactor::ZERO)
-            .color_blend_op(vk::BlendOp::ADD)
-            .src_alpha_blend_factor(vk::BlendFactor::ONE)
-            .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
-            .alpha_blend_op(vk::BlendOp::ADD);
+        let mut blend_state_attachments = vec![];
+        for blend_state_desc in blend_state_descriptors {
+            let attachment = vk::PipelineColorBlendAttachmentState::builder()
+                .color_write_mask(blend_state_desc.components)
+                .blend_enable(blend_state_desc.enable_blend)
+                .src_color_blend_factor(blend_state_desc.src_color_blend_factor)
+                .dst_color_blend_factor(blend_state_desc.dst_color_blend_factor)
+                .color_blend_op(blend_state_desc.color_blend_op)
+                .src_alpha_blend_factor(blend_state_desc.src_alpha_blend_factor)
+                .dst_alpha_blend_factor(blend_state_desc.dst_alpha_blend_factor)
+                .alpha_blend_op(blend_state_desc.alpha_blend_op);
 
-        let attachments = &[attachment];
+            blend_state_attachments.push(attachment);
+        }
+
         let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
             .logic_op_enable(false)
             .logic_op(vk::LogicOp::COPY)
-            .attachments(attachments)
+            .attachments(&blend_state_attachments[..])
             .blend_constants([0.0, 0.0, 0.0, 0.0]);
 
         let stages = &[vert_stage, frag_stage];
@@ -409,7 +454,15 @@ impl BootstrapPipelineLoader {
         let push_constant_ranges = &[vert_push_constant_range][..];
 
         let pipeline_layout = self.create_pipeline_layout(device, set_layouts, push_constant_ranges)?;
-        let pipeline = self.create_pipeline::<simple::Vertex>(vert_source, frag_source, device, extent, pipeline_layout, render_pass, true)?;
+
+        let blend_state = &[
+            BlendStateDescriptor::default(),
+            BlendStateDescriptor {
+                components: vk::ColorComponentFlags::R | vk::ColorComponentFlags::G,
+                ..Default::default()
+            }
+        ][..];
+        let pipeline = self.create_pipeline::<simple::Vertex>(vert_source, frag_source, device, extent, pipeline_layout, render_pass, blend_state, true)?;
 
         debug!("Base render pipeline layout ({:?}) and pipeline ({:?}) created.", pipeline_layout, pipeline);
 
@@ -430,7 +483,11 @@ impl BootstrapPipelineLoader {
         let push_constant_ranges = &[][..] as &[vk::PushConstantRange];
 
         let pipeline_layout = self.create_pipeline_layout(device, set_layouts, push_constant_ranges)?;
-        let pipeline = self.create_pipeline::<motion_blur::Vertex>(vert_source, frag_source, device, extent, pipeline_layout, render_pass, false)?;
+
+        let blend_state = &[
+            BlendStateDescriptor::default()
+        ][..];
+        let pipeline = self.create_pipeline::<motion_blur::Vertex>(vert_source, frag_source, device, extent, pipeline_layout, render_pass, blend_state, false)?;
 
         debug!("Postprocessing pipeline layout ({:?}) and pipeline ({:?}) created.", pipeline_layout, pipeline);
 
@@ -476,6 +533,20 @@ impl BootstrapPipelineLoader {
 }
 
 impl BootstrapLoader for BootstrapPipelineLoader {
+    fn add_required_device_features(&self, features: &mut vk::PhysicalDeviceFeaturesBuilder) -> Result<()> {
+        *features = features.independent_blend(true);
+
+        Ok(())
+    }
+
+    fn check_physical_device_compatibility(&self, _inst: &Instance, _app_data: &AppData, _physical_device: vk::PhysicalDevice, _properties: vk::PhysicalDeviceProperties, features: vk::PhysicalDeviceFeatures) -> Result<()> {
+        if features.independent_blend != vk::TRUE {
+            return Err(anyhow!(GraphicsCardSuitabilityError("Does not support independent blend.")));
+        }
+
+        Ok(())
+    }
+
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
         let mut pipeline_info = PipelineInfo::default();
         self.create_render_passes(device, &mut pipeline_info, app_data)?;
