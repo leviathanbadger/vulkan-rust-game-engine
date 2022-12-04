@@ -212,7 +212,7 @@ impl Image2D {
             (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (vk::AccessFlags::empty(), vk::AccessFlags::TRANSFER_WRITE, vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::TRANSFER),
             (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (vk::AccessFlags::TRANSFER_WRITE, vk::AccessFlags::SHADER_READ, vk::PipelineStageFlags::TRANSFER, vk::PipelineStageFlags::FRAGMENT_SHADER),
             (vk::ImageLayout::UNDEFINED, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => (vk::AccessFlags::empty(), vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE, vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS),
-            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL) => (vk::AccessFlags::empty(), vk::AccessFlags::COLOR_ATTACHMENT_READ | vk::AccessFlags::COLOR_ATTACHMENT_WRITE, vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS),
+            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL) => (vk::AccessFlags::empty(), vk::AccessFlags::COLOR_ATTACHMENT_READ | vk::AccessFlags::COLOR_ATTACHMENT_WRITE, vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT),
             _ => return Err(anyhow!("Unsupported image layout transition in Image2D::transition_image_layout"))
         };
 
@@ -357,14 +357,14 @@ impl Image2D {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        // let render_images_ref = &render_images;
-        // command_pool_info.submit_command_transient_sync(device, |command_buffer| {
-        //     for render_image in render_images_ref {
-        //         render_image.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, command_buffer)?;
-        //     }
+        let render_images_ref = &render_images;
+        command_pool_info.submit_command_transient_sync(device, |command_buffer| {
+            for render_image in render_images_ref {
+                render_image.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, command_buffer)?;
+            }
 
-        //     Ok(())
-        // })?;
+            Ok(())
+        })?;
 
         Ok(render_images)
     }
@@ -380,14 +380,14 @@ impl Image2D {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        // let motion_buffers_ref = &motion_vector_buffers;
-        // command_pool_info.submit_command_transient_sync(device, |command_buffer| {
-        //     for depth_stencil_buffer in motion_buffers_ref {
-        //         depth_stencil_buffer.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, command_buffer)?;
-        //     }
+        let motion_buffers_ref = &motion_vector_buffers;
+        command_pool_info.submit_command_transient_sync(device, |command_buffer| {
+            for depth_stencil_buffer in motion_buffers_ref {
+                depth_stencil_buffer.transition_image_layout(device, vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, command_buffer)?;
+            }
 
-        //     Ok(())
-        // })?;
+            Ok(())
+        })?;
 
         Ok(motion_vector_buffers)
     }
