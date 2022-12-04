@@ -660,8 +660,8 @@ impl App {
             .render_area(base_render_area)
             .clear_values(base_render_clear_values);
 
-        let pipeline = pipeline_info.base_render_pipeline;
-        let pipeline_layout = pipeline_info.base_render_layout;
+        let pipeline = pipeline_info.depth_motion_pipeline;
+        let pipeline_layout = pipeline_info.depth_motion_layout;
         let descriptor_set = descriptor_set_info.base_descriptor_sets[image_index];
 
         unsafe {
@@ -671,7 +671,21 @@ impl App {
                 self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
                 self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
 
-                self.scene.render(&self.device, command_buffer, &pipeline_layout)?;
+                self.scene.render(&self.device, command_buffer, &pipeline_layout, true)?;
+            }
+        }
+
+        let pipeline = pipeline_info.base_render_pipeline;
+        let pipeline_layout = pipeline_info.base_render_layout;
+
+        unsafe {
+            self.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
+
+            {
+                self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
+                self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
+
+                self.scene.render(&self.device, command_buffer, &pipeline_layout, false)?;
             }
 
             self.device.cmd_end_render_pass(*command_buffer);

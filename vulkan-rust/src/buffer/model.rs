@@ -14,7 +14,7 @@ use vulkanalia::{
 };
 
 use crate::{
-    shader_input::push_constants::{PushConstants},
+    shader_input::push_constants::{DepthMotionPushConstants, BaseRenderPushConstants},
     bootstrap::{CommandPoolsInfo}
 };
 
@@ -183,7 +183,7 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
         Ok(())
     }
 
-    pub fn write_render_to_command_buffer(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, viewmodel: &glm::Mat4, normal_viewmodel: Option<&glm::Mat4>, previous_viewmodel: Option<&glm::Mat4>) -> Result<()> {
+    pub fn write_render_to_command_buffer(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, viewmodel: &glm::Mat4, normal_viewmodel: Option<&glm::Mat4>, previous_viewmodel: Option<&glm::Mat4>, is_depth_motion_pass: bool) -> Result<()> {
         unsafe {
             let vertex_buffer = self.vertex_buffer.raw_buffer().ok_or_else(|| anyhow!("Could not unwrap vertex buffer. Has this model been initialized?"))?;
             device.cmd_bind_vertex_buffers(*command_buffer, 0, &[vertex_buffer], &[0]);
@@ -204,12 +204,18 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
             let normal_viewmodel: glm::Mat4 = if let Some(nm_vm) = normal_viewmodel { *nm_vm } else { glm::transpose(&glm::inverse(viewmodel)) };
             let previous_viewmodel: glm::Mat4 = if let Some(prev_vm) = previous_viewmodel { *prev_vm } else { *viewmodel };
 
-            let push_constants = PushConstants {
+            let push_constants_bytes: &[u8];
+
+            let dm_push_constants = DepthMotionPushConstants {
                 viewmodel: *viewmodel,
-                normal_viewmodel,
                 previous_viewmodel
             };
-            let push_constants_bytes = push_constants.as_bytes();
+            let br_push_constants = BaseRenderPushConstants {
+                viewmodel: *viewmodel,
+                normal_viewmodel
+            };
+
+            push_constants_bytes = if is_depth_motion_pass { dm_push_constants.as_bytes() } else { br_push_constants.as_bytes() };
             device.cmd_push_constants(*command_buffer, *pipeline_layout, vk::ShaderStageFlags::ALL_GRAPHICS, 0, push_constants_bytes);
 
             device.cmd_draw_indexed(*command_buffer, used_element_count, 1, 0, 0, 0);

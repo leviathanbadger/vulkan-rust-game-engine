@@ -62,12 +62,12 @@ impl Scene {
         }
     }
 
-    pub fn render(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout) -> Result<()> {
+    pub fn render(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, is_depth_motion_pass: bool) -> Result<()> {
         let view = self.render_camera.get_view_matrix()?;
 
         for obj in self.objects.iter() {
             if obj.is_enabled() {
-                obj.render(device, command_buffer, pipeline_layout, &view)?;
+                obj.render(device, command_buffer, pipeline_layout, &view, is_depth_motion_pass)?;
             }
         }
 
