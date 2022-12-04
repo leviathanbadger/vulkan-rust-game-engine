@@ -6,7 +6,7 @@ use crate::{
     bootstrap::{
         BootstrapLoader,
         BootstrapCommandBufferLoader,
-        BootstrapDepthBufferLoader,
+        BootstrapRenderImagesLoader,
         BootstrapDescriptorSetLoader,
         BootstrapFramebufferLoader,
         BootstrapPipelineLoader,
@@ -60,7 +60,7 @@ impl AppBuilder {
             .add_bootstrap_loader(Box::new(BootstrapSwapchainLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapCommandBufferLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapUniformLoader::new()))
-            .add_bootstrap_loader(Box::new(BootstrapDepthBufferLoader::new()))
+            .add_bootstrap_loader(Box::new(BootstrapRenderImagesLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapPipelineLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapFramebufferLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapSyncObjectsLoader::new()))

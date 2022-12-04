@@ -13,7 +13,7 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
-pub struct DepthBufferInfo {
+pub struct RenderImagesInfo {
     pub base_render_extent: vk::Extent2D,
     pub depth_stencil_buffers: Vec<Image2D>,
     pub base_render_images: Vec<Image2D>,
@@ -22,7 +22,7 @@ pub struct DepthBufferInfo {
     pub motion_vector_buffers: Vec<Image2D>
 }
 
-impl DepthBufferInfo {
+impl RenderImagesInfo {
     pub fn depth_stencil_format(&self) -> vk::Format {
         self.depth_stencil_buffers[0].format().unwrap()
     }
@@ -33,13 +33,13 @@ impl DepthBufferInfo {
 }
 
 bootstrap_loader! {
-    pub struct BootstrapDepthBufferLoader {
+    pub struct BootstrapRenderImagesLoader {
         depends_on(BootstrapSwapchainLoader, BootstrapCommandBufferLoader);
     }
 }
 
-impl BootstrapDepthBufferLoader {
-    fn create_depth_objects(&self, inst: &Instance, device: &Device, depth_buffer_info: &mut DepthBufferInfo, app_data: &AppData) -> Result<()> {
+impl BootstrapRenderImagesLoader {
+    fn create_depth_objects(&self, inst: &Instance, device: &Device, render_images_info: &mut RenderImagesInfo, app_data: &AppData) -> Result<()> {
         debug!("Creating depth and stencil buffer images...");
 
         let swapchain_info = app_data.swapchain.as_ref().unwrap();
@@ -50,22 +50,22 @@ impl BootstrapDepthBufferLoader {
 
         let depth_stencil_buffers = Image2D::new_and_create_depth_stencil_buffers(image_count, inst, device, app_data.physical_device.as_ref().unwrap(), &app_data.memory_properties, &swapchain_extent, false, command_pool_info)?;
 
-        depth_buffer_info.base_render_extent = swapchain_extent;
-        depth_buffer_info.depth_stencil_buffers = depth_stencil_buffers;
+        render_images_info.base_render_extent = swapchain_extent;
+        render_images_info.depth_stencil_buffers = depth_stencil_buffers;
 
         Ok(())
     }
 
-    fn destroy_depth_objects(&self, device: &Device, depth_buffer_info: &mut DepthBufferInfo) -> () {
+    fn destroy_depth_objects(&self, device: &Device, render_images_info: &mut RenderImagesInfo) -> () {
         debug!("Destroying depth and stencil buffer images...");
 
-        for depth_stencil_buffer in depth_buffer_info.depth_stencil_buffers.iter_mut() {
+        for depth_stencil_buffer in render_images_info.depth_stencil_buffers.iter_mut() {
             depth_stencil_buffer.destroy(device);
         }
-        depth_buffer_info.depth_stencil_buffers.clear();
+        render_images_info.depth_stencil_buffers.clear();
     }
 
-    fn create_render_images(&self, device: &Device, depth_buffer_info: &mut DepthBufferInfo, app_data: &AppData) -> Result<()> {
+    fn create_render_images(&self, device: &Device, render_images_info: &mut RenderImagesInfo, app_data: &AppData) -> Result<()> {
         debug!("Creating render images...");
 
         let swapchain_info = app_data.swapchain.as_ref().unwrap();
@@ -78,21 +78,21 @@ impl BootstrapDepthBufferLoader {
         let base_render_images = Image2D::new_and_create_render_images(image_count, device, &app_data.memory_properties, swapchain_format, &swapchain_extent, true, command_pool_info)?;
 
         debug!("Render images created: {:?}", base_render_images);
-        depth_buffer_info.base_render_images = base_render_images;
+        render_images_info.base_render_images = base_render_images;
 
         Ok(())
     }
 
-    fn destroy_render_images(&self, device: &Device, depth_buffer_info: &mut DepthBufferInfo) -> () {
+    fn destroy_render_images(&self, device: &Device, render_images_info: &mut RenderImagesInfo) -> () {
         debug!("Destroying render images...");
 
-        for render_image in depth_buffer_info.base_render_images.iter_mut() {
+        for render_image in render_images_info.base_render_images.iter_mut() {
             render_image.destroy(device);
         }
-        depth_buffer_info.base_render_images.clear();
+        render_images_info.base_render_images.clear();
     }
 
-    fn create_motion_vector_buffers(&self, inst: &Instance, device: &Device, depth_buffer_info: &mut DepthBufferInfo, app_data: &AppData) -> Result<()> {
+    fn create_motion_vector_buffers(&self, inst: &Instance, device: &Device, render_images_info: &mut RenderImagesInfo, app_data: &AppData) -> Result<()> {
         debug!("Creating motion vector buffers...");
 
         let swapchain_info = app_data.swapchain.as_ref().unwrap();
@@ -104,37 +104,37 @@ impl BootstrapDepthBufferLoader {
         let motion_vector_buffers = Image2D::new_and_create_motion_vector_buffers(image_count, inst, device, app_data.physical_device.as_ref().unwrap(), &app_data.memory_properties, &swapchain_extent, true, command_pool_info)?;
 
         debug!("Motion vector buffers created: {:?}", motion_vector_buffers);
-        depth_buffer_info.motion_vector_buffers = motion_vector_buffers;
+        render_images_info.motion_vector_buffers = motion_vector_buffers;
 
         Ok(())
     }
 
-    fn destroy_motion_vector_buffers(&self, device: &Device, depth_buffer_info: &mut DepthBufferInfo) -> () {
+    fn destroy_motion_vector_buffers(&self, device: &Device, render_images_info: &mut RenderImagesInfo) -> () {
         debug!("Destroying motion vector buffers...");
 
-        for motion_vector_buffer in depth_buffer_info.motion_vector_buffers.iter_mut() {
+        for motion_vector_buffer in render_images_info.motion_vector_buffers.iter_mut() {
             motion_vector_buffer.destroy(device);
         }
-        depth_buffer_info.motion_vector_buffers.clear();
+        render_images_info.motion_vector_buffers.clear();
     }
 }
 
-impl BootstrapLoader for BootstrapDepthBufferLoader {
+impl BootstrapLoader for BootstrapRenderImagesLoader {
     fn after_create_logical_device(&self, inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
-        let mut depth_buffer_info = DepthBufferInfo::default();
-        self.create_depth_objects(inst, device, &mut depth_buffer_info, app_data)?;
-        self.create_render_images(device, &mut depth_buffer_info, app_data)?;
-        self.create_motion_vector_buffers(inst, device, &mut depth_buffer_info, app_data)?;
-        app_data.depth_buffer = Some(depth_buffer_info);
+        let mut render_images_info = RenderImagesInfo::default();
+        self.create_depth_objects(inst, device, &mut render_images_info, app_data)?;
+        self.create_render_images(device, &mut render_images_info, app_data)?;
+        self.create_motion_vector_buffers(inst, device, &mut render_images_info, app_data)?;
+        app_data.render_images = Some(render_images_info);
 
         Ok(())
     }
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
-        if let Some(mut depth_buffer_info) = app_data.depth_buffer.take() {
-            self.destroy_motion_vector_buffers(device, &mut depth_buffer_info);
-            self.destroy_render_images(device, &mut depth_buffer_info);
-            self.destroy_depth_objects(device, &mut depth_buffer_info);
+        if let Some(mut render_images_info) = app_data.render_images.take() {
+            self.destroy_motion_vector_buffers(device, &mut render_images_info);
+            self.destroy_render_images(device, &mut render_images_info);
+            self.destroy_depth_objects(device, &mut render_images_info);
         }
     }
 }

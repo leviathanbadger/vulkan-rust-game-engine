@@ -1,4 +1,4 @@
-use super::{BootstrapLoader, BootstrapSwapchainLoader, BootstrapDepthBufferLoader, BootstrapPipelineLoader};
+use super::{BootstrapLoader, BootstrapSwapchainLoader, BootstrapRenderImagesLoader, BootstrapPipelineLoader};
 
 use anyhow::{Result};
 use winit::window::{Window};
@@ -19,14 +19,14 @@ pub struct FramebufferInfo {
 
 bootstrap_loader! {
     pub struct BootstrapFramebufferLoader {
-        depends_on(BootstrapSwapchainLoader, BootstrapDepthBufferLoader, BootstrapPipelineLoader);
+        depends_on(BootstrapSwapchainLoader, BootstrapRenderImagesLoader, BootstrapPipelineLoader);
     }
 }
 
 impl BootstrapFramebufferLoader {
     fn create_framebuffers(&self, device: &Device, framebuffer_info: &mut FramebufferInfo, app_data: &AppData) -> Result<()> {
-        let depth_buffer_info = &app_data.depth_buffer.as_ref().unwrap();
-        let render_extent = depth_buffer_info.base_render_extent;
+        let render_images_info = &app_data.render_images.as_ref().unwrap();
+        let render_extent = render_images_info.base_render_extent;
 
         let pipeline_info = app_data.pipeline.as_ref().unwrap();
 
@@ -38,9 +38,9 @@ impl BootstrapFramebufferLoader {
 
         let base_render_framebuffers = (0..image_count)
             .map(|q| {
-                let render_image_view = unsafe { depth_buffer_info.base_render_images[q as usize].raw_image_view().unwrap() };
-                let motion_vector_image_view = unsafe { depth_buffer_info.motion_vector_buffers[q as usize].raw_image_view().unwrap() };
-                let depth_stencil_image_view = unsafe { depth_buffer_info.depth_stencil_buffers[q as usize].raw_image_view().unwrap() };
+                let render_image_view = unsafe { render_images_info.base_render_images[q as usize].raw_image_view().unwrap() };
+                let motion_vector_image_view = unsafe { render_images_info.motion_vector_buffers[q as usize].raw_image_view().unwrap() };
+                let depth_stencil_image_view = unsafe { render_images_info.depth_stencil_buffers[q as usize].raw_image_view().unwrap() };
                 let attachments = &[render_image_view, motion_vector_image_view, depth_stencil_image_view];
                 let extent = render_extent;
                 let framebuffer_info = vk::FramebufferCreateInfo::builder()

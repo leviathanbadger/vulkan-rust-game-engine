@@ -1,7 +1,7 @@
 mod bootstrap_loader;
 
 mod bootstrap_command_buffer_loader;
-mod bootstrap_depth_buffer_loader;
+mod bootstrap_render_images_loader;
 mod bootstrap_descriptor_sets_loader;
 mod bootstrap_framebuffer_loader;
 mod bootstrap_pipeline_loader;
@@ -16,7 +16,7 @@ mod queue_family_indices;
 pub use bootstrap_loader::{BootstrapLoader};
 
 pub use bootstrap_command_buffer_loader::*;
-pub use bootstrap_depth_buffer_loader::*;
+pub use bootstrap_render_images_loader::*;
 pub use bootstrap_descriptor_sets_loader::*;
 pub use bootstrap_framebuffer_loader::*;
 pub use bootstrap_pipeline_loader::*;

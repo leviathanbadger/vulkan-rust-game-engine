@@ -138,11 +138,11 @@ impl BootstrapDescriptorSetLoader {
     fn create_descriptor_sets(&self, device: &Device, descriptor_sets_info: &mut DescriptorSetInfo, app_data: &AppData) -> Result<()> {
         let image_count = app_data.swapchain.as_ref().unwrap().image_count;
         let uniforms_info = app_data.uniforms.as_ref().unwrap();
-        let depth_buffer_info = app_data.depth_buffer.as_ref().unwrap();
+        let render_images_info = app_data.render_images.as_ref().unwrap();
 
         debug!("Allocating descriptor sets...");
         descriptor_sets_info.base_descriptor_sets = self.create_base_descriptor_sets(device, image_count, uniforms_info.base_descriptor_set_layout, uniforms_info.base_descriptor_pool, &uniforms_info.uniform_buffers, descriptor_sets_info)?;
-        descriptor_sets_info.postprocessing_descriptor_sets = self.create_postprocessing_descriptor_sets(device, image_count, uniforms_info.postprocessing_descriptor_set_layout, uniforms_info.postprocessing_descriptor_pool, &depth_buffer_info.base_render_images, &depth_buffer_info.motion_vector_buffers)?;
+        descriptor_sets_info.postprocessing_descriptor_sets = self.create_postprocessing_descriptor_sets(device, image_count, uniforms_info.postprocessing_descriptor_set_layout, uniforms_info.postprocessing_descriptor_pool, &render_images_info.base_render_images, &render_images_info.motion_vector_buffers)?;
         debug!("Descriptor sets allocated: {:?}", descriptor_sets_info.base_descriptor_sets);
 
         Ok(())

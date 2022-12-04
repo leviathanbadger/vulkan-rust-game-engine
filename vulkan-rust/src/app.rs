@@ -622,7 +622,7 @@ impl App {
     }
 
     fn update_command_buffer(&self, image_index: usize, command_buffer: &vk::CommandBuffer) -> Result<()> {
-        let render_extent = self.app_data.depth_buffer.as_ref().unwrap().base_render_extent;
+        let render_extent = self.app_data.render_images.as_ref().unwrap().base_render_extent;
         let swapchain_extent = self.app_data.swapchain.as_ref().unwrap().extent;
 
         let descriptor_set_info = &self.app_data.descriptor_sets.as_ref().unwrap();

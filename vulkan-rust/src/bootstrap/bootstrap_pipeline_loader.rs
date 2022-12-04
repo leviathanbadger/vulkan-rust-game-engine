@@ -1,4 +1,4 @@
-use super::{BootstrapLoader, BootstrapSwapchainLoader, BootstrapDepthBufferLoader, BootstrapUniformLoader};
+use super::{BootstrapLoader, BootstrapSwapchainLoader, BootstrapRenderImagesLoader, BootstrapUniformLoader};
 
 use std::{
     mem::{size_of},
@@ -140,7 +140,7 @@ pub struct PipelineInfo {
 
 bootstrap_loader! {
     pub struct BootstrapPipelineLoader {
-        depends_on(BootstrapSwapchainLoader, BootstrapDepthBufferLoader, BootstrapUniformLoader);
+        depends_on(BootstrapSwapchainLoader, BootstrapRenderImagesLoader, BootstrapUniformLoader);
     }
 }
 
@@ -317,9 +317,9 @@ impl BootstrapPipelineLoader {
         debug!("Creating render passes...");
 
         let swapchain_format = app_data.swapchain.as_ref().unwrap().surface_format.format;
-        let depth_buffer_info = &app_data.depth_buffer.as_ref().unwrap();
-        let depth_buffer_format = depth_buffer_info.depth_stencil_format();
-        let motion_vector_format = depth_buffer_info.motion_vector_format();
+        let render_images_info = &app_data.render_images.as_ref().unwrap();
+        let depth_buffer_format = render_images_info.depth_stencil_format();
+        let motion_vector_format = render_images_info.motion_vector_format();
 
         let color_attachments = &[
             AttachmentDescriptor {
