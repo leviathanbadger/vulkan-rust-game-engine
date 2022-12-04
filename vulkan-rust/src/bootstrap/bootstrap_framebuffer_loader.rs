@@ -1,4 +1,4 @@
-use super::{BootstrapLoader, BootstrapSwapchainLoader, BootstrapPipelineLoader};
+use super::{BootstrapLoader, BootstrapSwapchainLoader, BootstrapDepthBufferLoader, BootstrapPipelineLoader};
 
 use anyhow::{Result};
 use winit::window::{Window};
@@ -13,33 +13,37 @@ use crate::{
 
 #[derive(Debug, Default)]
 pub struct FramebufferInfo {
-    pub framebuffers: Vec<vk::Framebuffer>
+    pub base_render_framebuffers: Vec<vk::Framebuffer>,
+    pub postprocessing_framebuffers: Vec<vk::Framebuffer>
 }
 
 bootstrap_loader! {
     pub struct BootstrapFramebufferLoader {
-        depends_on(BootstrapSwapchainLoader, BootstrapPipelineLoader);
+        depends_on(BootstrapSwapchainLoader, BootstrapDepthBufferLoader, BootstrapPipelineLoader);
     }
 }
 
 impl BootstrapFramebufferLoader {
-    fn create_framebuffers(&self, device: &Device, app_data: &mut AppData) -> Result<()> {
-        let swapchain_info = app_data.swapchain.as_ref().unwrap();
+    fn create_framebuffers(&self, device: &Device, framebuffer_info: &mut FramebufferInfo, app_data: &AppData) -> Result<()> {
+        let depth_buffer_info = &app_data.depth_buffer.as_ref().unwrap();
+        let render_extent = depth_buffer_info.base_render_extent;
+
         let pipeline_info = app_data.pipeline.as_ref().unwrap();
+
+        let swapchain_info = app_data.swapchain.as_ref().unwrap();
         let image_count = swapchain_info.image_count;
         let swapchain_extent = swapchain_info.extent;
 
         debug!("Creating framebuffers for {} image views...", image_count);
 
-        let depth_image_view = unsafe { app_data.depth_buffer.as_ref().unwrap().image.raw_image_view().unwrap() };
-
-        let framebuffers = (0..image_count)
+        let base_render_framebuffers = (0..image_count)
             .map(|q| {
-                let swapchain_image_view = unsafe { swapchain_info.images[q as usize].raw_image_view().unwrap() };
-                let attachments = &[swapchain_image_view, depth_image_view];
-                let extent = swapchain_extent;
+                let render_image_view = unsafe { depth_buffer_info.base_render_images[q as usize].raw_image_view().unwrap() };
+                let depth_stencil_image_view = unsafe { depth_buffer_info.depth_stencil_buffers[q as usize].raw_image_view().unwrap() };
+                let attachments = &[render_image_view, depth_stencil_image_view];
+                let extent = render_extent;
                 let framebuffer_info = vk::FramebufferCreateInfo::builder()
-                    .render_pass(pipeline_info.render_pass)
+                    .render_pass(pipeline_info.base_render_pass)
                     .attachments(attachments)
                     .width(extent.width)
                     .height(extent.height)
@@ -51,32 +55,62 @@ impl BootstrapFramebufferLoader {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        debug!("Framebuffers created: {:?}", framebuffers);
-        app_data.framebuffer = Some(FramebufferInfo { framebuffers });
+        let postprocessing_framebuffers = (0..image_count)
+            .map(|q| {
+                let swapchain_image_view = unsafe { swapchain_info.images[q as usize].raw_image_view().unwrap() };
+                let attachments = &[swapchain_image_view];
+                let extent = swapchain_extent;
+                let framebuffer_info = vk::FramebufferCreateInfo::builder()
+                    .render_pass(pipeline_info.postprocessing_render_pass)
+                    .attachments(attachments)
+                    .width(extent.width)
+                    .height(extent.height)
+                    .layers(1);
+
+                unsafe {
+                    device.create_framebuffer(&framebuffer_info, None)
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        debug!("Framebuffers created: {:?}; {:?}", base_render_framebuffers, postprocessing_framebuffers);
+        framebuffer_info.base_render_framebuffers = base_render_framebuffers;
+        framebuffer_info.postprocessing_framebuffers = postprocessing_framebuffers;
 
         Ok(())
     }
 
-    fn destroy_framebuffers(&self, device: &Device, app_data: &mut AppData) -> () {
-        if let Some(framebuffer_info) = app_data.framebuffer.take() {
-            debug!("Destroying framebuffers...");
-            unsafe {
-                for framebuffer in framebuffer_info.framebuffers.iter() {
-                    device.destroy_framebuffer(*framebuffer, None);
-                }
+    fn destroy_framebuffers(&self, device: &Device, framebuffer_info: &mut FramebufferInfo) -> () {
+        debug!("Destroying framebuffers...");
+
+        unsafe {
+            for framebuffer in framebuffer_info.base_render_framebuffers.iter() {
+                device.destroy_framebuffer(*framebuffer, None);
             }
         }
+        framebuffer_info.base_render_framebuffers.clear();
+
+        unsafe {
+            for framebuffer in framebuffer_info.postprocessing_framebuffers.iter() {
+                device.destroy_framebuffer(*framebuffer, None);
+            }
+        }
+        framebuffer_info.postprocessing_framebuffers.clear();
     }
 }
 
 impl BootstrapLoader for BootstrapFramebufferLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
-        self.create_framebuffers(device, app_data)?;
+        let mut framebuffer_info = FramebufferInfo::default();
+        self.create_framebuffers(device, &mut framebuffer_info, app_data)?;
+        app_data.framebuffer = Some(framebuffer_info);
 
         Ok(())
     }
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
-        self.destroy_framebuffers(device, app_data);
+        if let Some(mut framebuffer_info) = app_data.framebuffer.take() {
+            self.destroy_framebuffers(device, &mut framebuffer_info);
+        }
     }
 }

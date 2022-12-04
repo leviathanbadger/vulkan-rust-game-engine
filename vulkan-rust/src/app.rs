@@ -622,10 +622,18 @@ impl App {
     }
 
     fn update_command_buffer(&self, image_index: usize, command_buffer: &vk::CommandBuffer) -> Result<()> {
-        let extent = self.app_data.swapchain.as_ref().unwrap().extent;
-        let render_area = vk::Rect2D::builder()
+        let render_extent = self.app_data.depth_buffer.as_ref().unwrap().base_render_extent;
+        let swapchain_extent = self.app_data.swapchain.as_ref().unwrap().extent;
+
+        let descriptor_set_info = &self.app_data.descriptor_sets.as_ref().unwrap();
+
+        let pipeline_info = &self.app_data.pipeline.as_ref().unwrap();
+
+        let framebuffer_info = &self.app_data.framebuffer.as_ref().unwrap();
+
+        let base_render_area = vk::Rect2D::builder()
             .offset(vk::Offset2D::default())
-            .extent(extent);
+            .extent(render_extent);
 
         let clear_color = self.scene.clear_color;
         let color_clear_value = vk::ClearValue {
@@ -640,28 +648,61 @@ impl App {
             }
         };
 
-        let pipeline_info = &self.app_data.pipeline.as_ref().unwrap();
-        let render_pass = pipeline_info.render_pass;
-        let framebuffer = self.app_data.framebuffer.as_ref().unwrap().framebuffers[image_index];
-        let clear_values = &[color_clear_value, depth_clear_value];
-        let render_pass_info = vk::RenderPassBeginInfo::builder()
-            .render_pass(render_pass)
-            .framebuffer(framebuffer)
-            .render_area(render_area)
-            .clear_values(clear_values);
+        let base_render_clear_values = &[color_clear_value, depth_clear_value];
+        let base_render_pass_info = vk::RenderPassBeginInfo::builder()
+            .render_pass(pipeline_info.base_render_pass)
+            .framebuffer(framebuffer_info.base_render_framebuffers[image_index])
+            .render_area(base_render_area)
+            .clear_values(base_render_clear_values);
 
-        let pipeline = pipeline_info.pipeline;
-        let pipeline_layout = pipeline_info.layout;
-        let descriptor_set = self.app_data.descriptor_sets.as_ref().unwrap().descriptor_sets[image_index];
+        let pipeline = pipeline_info.base_render_pipeline;
+        let pipeline_layout = pipeline_info.base_render_layout;
+        let descriptor_set = descriptor_set_info.base_descriptor_sets[image_index];
 
         unsafe {
-            self.device.cmd_begin_render_pass(*command_buffer, &render_pass_info, vk::SubpassContents::INLINE);
+            self.device.cmd_begin_render_pass(*command_buffer, &base_render_pass_info, vk::SubpassContents::INLINE);
 
             {
                 self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
                 self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
 
                 self.scene.render(&self.device, command_buffer, &pipeline_layout)?;
+            }
+
+            self.device.cmd_end_render_pass(*command_buffer);
+        }
+
+        let postprocessing_area = vk::Rect2D::builder()
+            .offset(vk::Offset2D::default())
+            .extent(swapchain_extent);
+
+        let postprocessing_color_clear_value = vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [0.0, 0.0, 0.0, 1.0]
+            }
+        };
+        let postprocessing_clear_values = &[postprocessing_color_clear_value];
+        let postprocessing_pass_info = vk::RenderPassBeginInfo::builder()
+            .render_pass(pipeline_info.postprocessing_render_pass)
+            .framebuffer(framebuffer_info.postprocessing_framebuffers[image_index])
+            .render_area(postprocessing_area)
+            .clear_values(postprocessing_clear_values);
+
+        let pipeline = pipeline_info.postprocessing_pipeline;
+        let pipeline_layout = pipeline_info.postprocessing_layout;
+        let descriptor_set = descriptor_set_info.postprocessing_descriptor_sets[image_index];
+
+        unsafe {
+            self.device.cmd_begin_render_pass(*command_buffer, &postprocessing_pass_info, vk::SubpassContents::INLINE);
+
+            {
+                self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
+                self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
+
+                let buffer = &descriptor_set_info.postprocessing_vertex_buffer;
+                let raw_buffer = buffer.raw_buffer().unwrap();
+                self.device.cmd_bind_vertex_buffers(*command_buffer, 0, &[raw_buffer], &[0]);
+                self.device.cmd_draw(*command_buffer, buffer.used_element_count() as u32, 1, 0, 0);
             }
 
             self.device.cmd_end_render_pass(*command_buffer);
@@ -713,16 +754,17 @@ impl App {
     }
 }
 
-//TODO: infer normal from face if none exists per vertex
-//TODO: dynamically create/update descriptor sets based on materials
+//TODO: render at a lower resolution than the swapchain-created images
+//TODO: attach motion vector image to framebuffer for use in DLSS2/FSR2/motion blur
+//TODO: only create one sampler resource, not one per image
+//TODO: when loading OBJ files, infer vertex normal from face if none exists per vertex
+//TODO: use bindless rendering to support multiple textures
 //TODO: learn to use (and actually use) HDR color space
 //TODO: deprecate static_screen_space shader, or update it to use screen coordinates and support textures/ETC
 //TODO: add asynchronous loading of assets; move asset loading onto other threads (placeholder models/textures if things don't load fast enough)
 //TODO: single location for GPU memory management (allocation/freeing)
 //TODO: improve game object abstraction
 //TODO: add support for keyboard/mouse input
-//TODO: render at a lower resolution than the swapchain-created images
-//TODO: attach motion vector image to framebuffer for use in DLSS2/FSR2/motion blur
 //TODO: add support for DLSS2
 //TODO: add support for FSR2
 //TODO: add support for fullscreen

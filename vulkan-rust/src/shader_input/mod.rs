@@ -1,3 +1,4 @@
+pub mod motion_blur;
 pub mod simple;
 pub mod static_screen_space;
 

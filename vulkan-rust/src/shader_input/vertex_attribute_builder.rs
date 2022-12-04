@@ -50,6 +50,12 @@ impl VertexAttributeBuilder {
     }
 }
 
+pub trait HasVertexAttributeBindings {
+    fn binding_description() -> vk::VertexInputBindingDescription;
+
+    fn attribute_descriptions() -> &'static [vk::VertexInputAttributeDescription];
+}
+
 #[macro_export]
 macro_rules! vertex_type {
     ( pub struct $struct_name:ident { $( $name:ident : $type:ty ),* } ) => {
@@ -83,12 +89,14 @@ macro_rules! vertex_type {
                 pub fn new( $( $name : $type ),* ) -> Self {
                     Self { $( $name ),* }
                 }
+            }
 
-                pub fn binding_description() -> vk::VertexInputBindingDescription {
+            impl crate::shader_input::vertex_attribute_builder::HasVertexAttributeBindings for $struct_name {
+                fn binding_description() -> vk::VertexInputBindingDescription {
                     VERTEX_DESCRIPTIONS_BUILDER.build_binding()
                 }
 
-                pub fn attribute_descriptions() -> &'static [vk::VertexInputAttributeDescription] {
+                fn attribute_descriptions() -> &'static [vk::VertexInputAttributeDescription] {
                     VERTEX_DESCRIPTIONS_BUILDER.build_attributes()
                 }
             }
