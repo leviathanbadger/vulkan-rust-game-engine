@@ -802,7 +802,6 @@ impl App {
 
 //TODO: render at a lower resolution than the swapchain-created images
 //TODO: only create one sampler resource, not one per image
-//TODO: when loading OBJ files, infer vertex normal from face if none exists per vertex
 //TODO: use bindless rendering to support multiple textures
 //TODO: learn to use (and actually use) HDR color space
 //TODO: deprecate static_screen_space shader, or update it to use screen coordinates and support textures/ETC

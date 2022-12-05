@@ -18,7 +18,7 @@ use crate::{
 };
 
 pub trait CanBeVertexBufferType : Copy + Clone + Hash + PartialEq + Eq + ::std::fmt::Debug {
-    fn create_vertex_from_opts(pos: glm::Vec3, normal: Option<glm::Vec3>, color: Option<glm::Vec3>, uv: Option<glm::Vec2>) -> Self;
+    fn create_vertex_from_opts(pos: glm::Vec3, normal: Option<glm::Vec3>, color: Option<glm::Vec3>, uv: Option<glm::Vec2>, face_normal: Option<glm::Vec3>) -> Self;
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -73,11 +73,32 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
         let mut indices: Vec<u32> = vec![];
         let mut vertex_indices = HashMap::<TVert, u32>::new();
         for model in &models {
-            for mesh_index in &model.mesh.indices {
+            let mesh = &model.mesh;
+
+            let mut next_face = 0usize;
+            let mut face_normals = vec![];
+            for _q in 0..(model.mesh.indices.len() / 3) {
+                let end = next_face + 3;
+
+                let pt_indices = &model.mesh.indices[next_face..end];
+                let pt1_offset = (pt_indices[0] * 3) as usize;
+                let pt1 = glm::vec3(mesh.positions[pt1_offset], mesh.positions[pt1_offset + 2], mesh.positions[pt1_offset + 1]);
+                let pt2_offset = (pt_indices[1] * 3) as usize;
+                let pt2 = glm::vec3(mesh.positions[pt2_offset], mesh.positions[pt2_offset + 2], mesh.positions[pt2_offset + 1]);
+                let pt3_offset = (pt_indices[2] * 3) as usize;
+                let pt3 = glm::vec3(mesh.positions[pt3_offset], mesh.positions[pt3_offset + 2], mesh.positions[pt3_offset + 1]);
+
+                let face_normal = glm::cross(&glm::normalize(&(pt1 - pt2)), &glm::normalize(&(pt3 - pt2)));
+                face_normals.push(Some(face_normal));
+
+                next_face = end;
+            }
+
+            for (q, mesh_index) in model.mesh.indices.iter().enumerate() {
+                let face_normal = *face_normals.get(q / 3).unwrap_or(&None);
+
                 let vertex: TVert;
                 {
-                    let mesh = &model.mesh;
-
                     let pos_offset = (mesh_index * 3) as usize;
                     let pos = glm::vec3(mesh.positions[pos_offset], mesh.positions[pos_offset + 2], mesh.positions[pos_offset + 1]); //Swap Y and Z - this engine uses Z as the up direction, but assets are created with Y as the up direction
                     // let pos = glm::vec3(mesh.positions[pos_offset + 1], mesh.positions[pos_offset + 0], mesh.positions[pos_offset + 2]);
@@ -104,7 +125,7 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
                         Some(glm::vec2(mesh.texcoords[uv_offset], 1.0 - mesh.texcoords[uv_offset + 1]))
                     };
 
-                    vertex = TVert::create_vertex_from_opts(pos, normal, color, uv);
+                    vertex = TVert::create_vertex_from_opts(pos, normal, color, uv, face_normal);
                 }
 
                 if let Some(model_index) = vertex_indices.get(&vertex) {

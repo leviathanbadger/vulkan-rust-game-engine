@@ -21,7 +21,7 @@ lazy_static! {
 }
 
 impl CanBeVertexBufferType for Vertex {
-    fn create_vertex_from_opts(pos: glm::Vec3, _normal: Option<glm::Vec3>, color: Option<glm::Vec3>, _uv: Option<glm::Vec2>) -> Self {
+    fn create_vertex_from_opts(pos: glm::Vec3, _normal: Option<glm::Vec3>, color: Option<glm::Vec3>, _uv: Option<glm::Vec2>, _face_normal: Option<glm::Vec3>) -> Self {
         Vertex::new(glm::vec2(pos.x, pos.y), color.unwrap_or(*WHITE))
     }
 }

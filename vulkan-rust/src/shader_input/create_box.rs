@@ -30,40 +30,40 @@ pub fn create_box<TVert: CanBeVertexBufferType>(pos: glm::Vec3, size: glm::Vec3)
 
     vec![
         //-x
-        TVert::create_vertex_from_opts(aaa, nxn, red, aa),
-        TVert::create_vertex_from_opts(aba, nxn, red, ba),
-        TVert::create_vertex_from_opts(aab, nxn, red, ab),
-        TVert::create_vertex_from_opts(abb, nxn, red, bb),
+        TVert::create_vertex_from_opts(aaa, nxn, red, aa, None),
+        TVert::create_vertex_from_opts(aba, nxn, red, ba, None),
+        TVert::create_vertex_from_opts(aab, nxn, red, ab, None),
+        TVert::create_vertex_from_opts(abb, nxn, red, bb, None),
 
         //+x
-        TVert::create_vertex_from_opts(baa, nxp, red, ab),
-        TVert::create_vertex_from_opts(bab, nxp, red, aa),
-        TVert::create_vertex_from_opts(bba, nxp, red, bb),
-        TVert::create_vertex_from_opts(bbb, nxp, red, ba),
+        TVert::create_vertex_from_opts(baa, nxp, red, ab, None),
+        TVert::create_vertex_from_opts(bab, nxp, red, aa, None),
+        TVert::create_vertex_from_opts(bba, nxp, red, bb, None),
+        TVert::create_vertex_from_opts(bbb, nxp, red, ba, None),
 
         //-y
-        TVert::create_vertex_from_opts(aaa, nyn, green, aa),
-        TVert::create_vertex_from_opts(aab, nyn, green, ab),
-        TVert::create_vertex_from_opts(baa, nyn, green, ba),
-        TVert::create_vertex_from_opts(bab, nyn, green, bb),
+        TVert::create_vertex_from_opts(aaa, nyn, green, aa, None),
+        TVert::create_vertex_from_opts(aab, nyn, green, ab, None),
+        TVert::create_vertex_from_opts(baa, nyn, green, ba, None),
+        TVert::create_vertex_from_opts(bab, nyn, green, bb, None),
 
         //+y
-        TVert::create_vertex_from_opts(aba, nyp, green, aa),
-        TVert::create_vertex_from_opts(bba, nyp, green, ba),
-        TVert::create_vertex_from_opts(abb, nyp, green, ab),
-        TVert::create_vertex_from_opts(bbb, nyp, green, bb),
+        TVert::create_vertex_from_opts(aba, nyp, green, aa, None),
+        TVert::create_vertex_from_opts(bba, nyp, green, ba, None),
+        TVert::create_vertex_from_opts(abb, nyp, green, ab, None),
+        TVert::create_vertex_from_opts(bbb, nyp, green, bb, None),
 
         //-z
-        TVert::create_vertex_from_opts(aaa, nzn, blue, ab),
-        TVert::create_vertex_from_opts(baa, nzn, blue, aa),
-        TVert::create_vertex_from_opts(aba, nzn, blue, bb),
-        TVert::create_vertex_from_opts(bba, nzn, blue, ba),
+        TVert::create_vertex_from_opts(aaa, nzn, blue, ab, None),
+        TVert::create_vertex_from_opts(baa, nzn, blue, aa, None),
+        TVert::create_vertex_from_opts(aba, nzn, blue, bb, None),
+        TVert::create_vertex_from_opts(bba, nzn, blue, ba, None),
 
         //+z
-        TVert::create_vertex_from_opts(aab, nzp, blue, aa),
-        TVert::create_vertex_from_opts(abb, nzp, blue, ba),
-        TVert::create_vertex_from_opts(bab, nzp, blue, ab),
-        TVert::create_vertex_from_opts(bbb, nzp, blue, bb),
+        TVert::create_vertex_from_opts(aab, nzp, blue, aa, None),
+        TVert::create_vertex_from_opts(abb, nzp, blue, ba, None),
+        TVert::create_vertex_from_opts(bab, nzp, blue, ab, None),
+        TVert::create_vertex_from_opts(bbb, nzp, blue, bb, None),
     ]
 }
 
