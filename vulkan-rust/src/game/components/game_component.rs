@@ -11,7 +11,8 @@ use crate::{
         can_be_enabled::{CanBeEnabled},
         transform::{Transform}
     },
-    app_data::{AppData}
+    app_data::{AppData},
+    buffer::{SingleFrameRenderInfo}
 };
 
 pub trait GameComponent : Debug + CanBeEnabled {
@@ -24,7 +25,7 @@ pub trait GameComponent : Debug + CanBeEnabled {
     }
     fn unload(&mut self, _device: &Device) -> () { }
 
-    fn render(&self, _device: &Device, _command_buffer: &vk::CommandBuffer, _pipeline_layout: &vk::PipelineLayout, _viewmodel: &glm::Mat4, _normal_viewmodel: Option<&glm::Mat4>, _previous_viewmodel: Option<&glm::Mat4>, _is_depth_motion_pass: bool) -> Result<()> {
+    fn create_frame_render_info(&self, _frame_info: &mut SingleFrameRenderInfo, _viewmodel: &glm::Mat4, _previous_viewmodel: Option<&glm::Mat4>) -> Result<()> {
         Ok(())
     }
 }

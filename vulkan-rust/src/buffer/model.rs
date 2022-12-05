@@ -1,4 +1,4 @@
-use super::{Buffer, IntoBufferData};
+use super::{Buffer, IntoBufferData, SingleModelRenderInfo, SingleFrameRenderInfo};
 
 use core::hash::{Hash};
 use std::{
@@ -14,7 +14,6 @@ use vulkanalia::{
 };
 
 use crate::{
-    shader_input::push_constants::{DepthMotionPushConstants, BaseRenderPushConstants},
     bootstrap::{CommandPoolsInfo}
 };
 
@@ -183,43 +182,41 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
         Ok(())
     }
 
-    pub fn write_render_to_command_buffer(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, viewmodel: &glm::Mat4, normal_viewmodel: Option<&glm::Mat4>, previous_viewmodel: Option<&glm::Mat4>, is_depth_motion_pass: bool) -> Result<()> {
-        unsafe {
-            let vertex_buffer = self.vertex_buffer.raw_buffer().ok_or_else(|| anyhow!("Could not unwrap vertex buffer. Has this model been initialized?"))?;
-            device.cmd_bind_vertex_buffers(*command_buffer, 0, &[vertex_buffer], &[0]);
+    pub fn create_frame_render_info(&self, frame_info: &mut SingleFrameRenderInfo, is_static: bool, is_opaque: bool, viewmodel: &glm::Mat4, previous_viewmodel: Option<&glm::Mat4>) -> Result<()> {
+        let raw_vertex_buffer = unsafe { self.vertex_buffer.raw_buffer() }.ok_or_else(|| anyhow!("Could not unwrap vertex buffer. Has this model been initialized?"))?;
 
-            let used_element_count: u32;
-            if let Some(index_buffer) = self.index_buffer_16.as_ref() {
-                used_element_count = index_buffer.used_element_count() as u32;
-                let raw_buffer = index_buffer.raw_buffer().ok_or_else(|| anyhow!("Could not unwrap index buffer. Has this model been initialized?"))?;
-                device.cmd_bind_index_buffer(*command_buffer, raw_buffer, 0, self.index_type);
-            } else if let Some(index_buffer) = self.index_buffer_32.as_ref() {
-                used_element_count = index_buffer.used_element_count() as u32;
-                let raw_buffer = index_buffer.raw_buffer().ok_or_else(|| anyhow!("Could not unwrap index buffer. Has this model been initialized?"))?;
-                device.cmd_bind_index_buffer(*command_buffer, raw_buffer, 0, self.index_type);
-            } else {
-                return Err(anyhow!("No index buffer to unwrap for render... WTF?"));
-            }
-
-            let normal_viewmodel: glm::Mat4 = if let Some(nm_vm) = normal_viewmodel { *nm_vm } else { glm::transpose(&glm::inverse(viewmodel)) };
-            let previous_viewmodel: glm::Mat4 = if let Some(prev_vm) = previous_viewmodel { *prev_vm } else { *viewmodel };
-
-            let push_constants_bytes: &[u8];
-
-            let dm_push_constants = DepthMotionPushConstants {
-                viewmodel: *viewmodel,
-                previous_viewmodel
-            };
-            let br_push_constants = BaseRenderPushConstants {
-                viewmodel: *viewmodel,
-                normal_viewmodel
-            };
-
-            push_constants_bytes = if is_depth_motion_pass { dm_push_constants.as_bytes() } else { br_push_constants.as_bytes() };
-            device.cmd_push_constants(*command_buffer, *pipeline_layout, vk::ShaderStageFlags::ALL_GRAPHICS, 0, push_constants_bytes);
-
-            device.cmd_draw_indexed(*command_buffer, used_element_count, 1, 0, 0, 0);
+        let raw_index_buffer: vk::Buffer;
+        let used_element_count: u32;
+        if let Some(index_buffer) = self.index_buffer_16.as_ref() {
+            used_element_count = index_buffer.used_element_count() as u32;
+            let raw_buffer = unsafe { index_buffer.raw_buffer() }.ok_or_else(|| anyhow!("Could not unwrap index buffer. Has this model been initialized?"))?;
+            raw_index_buffer = raw_buffer;
+        } else if let Some(index_buffer) = self.index_buffer_32.as_ref() {
+            used_element_count = index_buffer.used_element_count() as u32;
+            let raw_buffer = unsafe { index_buffer.raw_buffer() }.ok_or_else(|| anyhow!("Could not unwrap index buffer. Has this model been initialized?"))?;
+            raw_index_buffer = raw_buffer;
+        } else {
+            return Err(anyhow!("No index buffer to unwrap for render... WTF?"));
         }
+
+        let previous_viewmodel: glm::Mat4 = if let Some(prev_vm) = previous_viewmodel { *prev_vm } else { *viewmodel };
+
+        let model_render_info = SingleModelRenderInfo {
+            is_static,
+            is_opaque,
+            viewmodel: *viewmodel,
+            previous_viewmodel,
+
+            vertex_buffer: raw_vertex_buffer,
+            index_buffer: Some(raw_index_buffer),
+            index_type: self.index_type,
+
+            element_count: used_element_count,
+
+            ..Default::default()
+        };
+
+        frame_info.models_to_render.push(model_render_info);
 
         Ok(())
     }

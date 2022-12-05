@@ -32,14 +32,14 @@ use crate::{
         simple::{Vertex}
     },
     game::{
-        has_camera_matrix::{HasCameraMatrix},
         scene::{Scene},
         transform::{ORIGIN},
         game_object::{GameObject},
         components::{RotateOverTimeComponent, RenderModelComponent},
         lights::{DirectionalLight}
     },
-    frame_info::{FrameInfo}
+    frame_info::{FrameInfo},
+    buffer::{SingleFrameRenderInfo}
 };
 
 #[derive(Debug, Error)]
@@ -500,10 +500,14 @@ impl App {
 
             self.scene.load_and_unload(&self.device, &self.app_data)?;
 
-            self.render()?;
-            let bounds = self.app_data.swapchain.as_ref().unwrap().extent;
+            let bounds = self.app_data.render_images.as_ref().unwrap().base_render_extent;
+            let frame_render_info = self.create_frame_render_info(bounds)?;
+            let frame_render_info = frame_render_info.as_ref();
+
             self.scene.end_frame(bounds)?;
             self.frame_info.current_frame_index += 1;
+
+            self.render(frame_render_info)?;
         }
 
         if self.needs_new_swapchain {
@@ -521,7 +525,20 @@ impl App {
         self.shutdown_requested.clone()
     }
 
-    fn render(&mut self) -> Result<()> {
+    fn create_frame_render_info(&self, bounds: vk::Extent2D) -> Result<Box<SingleFrameRenderInfo>> {
+        let mut frame_info = SingleFrameRenderInfo {
+            frame_index: self.frame_info.current_frame_index,
+            time_in_seconds: self.frame_info.current_frame_delta_time.as_secs_f32(),
+
+            ..Default::default()
+        };
+
+        self.scene.create_frame_render_info(&mut frame_info, bounds)?;
+
+        Ok(Box::new(frame_info))
+    }
+
+    fn render(&mut self, frame_info: &SingleFrameRenderInfo) -> Result<()> {
         let swapchain = self.app_data.swapchain.as_ref().unwrap().swapchain;
 
         let sync_frame = (self.frame_info.current_frame_index % self.app_data.max_frames_in_flight()) as usize;
@@ -551,7 +568,7 @@ impl App {
 
         sync_objects_info.images_in_flight[image_index] = frame_sync.in_flight_fence;
 
-        self.update_uniform_buffer(image_index)?;
+        self.update_uniform_buffer(image_index, frame_info)?;
 
         let command_pools_info = self.app_data.command_pools.as_ref();
         let command_buffer = command_pools_info.unwrap().command_buffers[image_index];
@@ -566,7 +583,7 @@ impl App {
             signal_semaphores,
             &frame_sync.in_flight_fence,
             |cb| {
-                self.update_command_buffer(image_index, cb)
+                self.update_command_buffer(image_index, cb, frame_info)
             })?;
 
         let swapchains = &[swapchain];
@@ -594,26 +611,18 @@ impl App {
         Ok(())
     }
 
-    fn update_uniform_buffer(&mut self, image_index: usize) -> Result<()> {
-        let extent = self.app_data.swapchain.as_ref().unwrap().extent;
-        let camera = &mut self.scene.render_camera;
-        let projection = camera.get_projection_matrix(extent)?;
-        let view = camera.get_view_matrix()?;
-
+    fn update_uniform_buffer(&mut self, image_index: usize, frame_info: &SingleFrameRenderInfo) -> Result<()> {
         let buffer = &mut self.app_data.uniforms.as_mut().unwrap().uniform_buffers[image_index];
 
-        let directional_light = self.scene.directional_light.unwrap_or_default();
-        let normal_matrix = glm::convert::<glm::DMat4, glm::Mat4>(glm::transpose(&glm::inverse(&view)));
-        let actual_direction: glm::Vec3 = (normal_matrix * glm::vec4(directional_light.direction.x, directional_light.direction.y, directional_light.direction.z, 0.0)).xyz();
-
         let ubo = UniformBufferObject {
-            proj: projection,
-            previous_proj: *camera.get_previous_projection_matrix().unwrap_or(&projection),
-            ambient_light: self.scene.ambient_light,
-            directional_light_color: directional_light.color,
-            directional_light_direction: actual_direction,
-            frame_index: self.frame_info.current_frame_index,
-            time_in_seconds: self.frame_info.current_frame_delta_time.as_secs_f32(),
+            proj: frame_info.proj,
+            previous_proj: frame_info.previous_proj,
+            ambient_light: frame_info.ambient_light,
+            directional_light_color: frame_info.directional_light_color,
+            directional_light_direction: frame_info.directional_light_direction,
+            frame_index: frame_info.frame_index,
+            time_in_seconds: frame_info.time_in_seconds,
+
             ..Default::default() //Necessary for the manual padding
         };
         buffer.set_data(&self.device, &ubo)?;
@@ -621,7 +630,7 @@ impl App {
         Ok(())
     }
 
-    fn update_command_buffer(&self, image_index: usize, command_buffer: &vk::CommandBuffer) -> Result<()> {
+    fn update_command_buffer(&self, image_index: usize, command_buffer: &vk::CommandBuffer, frame_info: &SingleFrameRenderInfo) -> Result<()> {
         let render_extent = self.app_data.render_images.as_ref().unwrap().base_render_extent;
         let swapchain_extent = self.app_data.swapchain.as_ref().unwrap().extent;
 
@@ -635,7 +644,7 @@ impl App {
             .offset(vk::Offset2D::default())
             .extent(render_extent);
 
-        let clear_color = self.scene.clear_color;
+        let clear_color = frame_info.clear_color;
         let color_clear_value = vk::ClearValue {
             color: vk::ClearColorValue {
                 float32: [clear_color[0], clear_color[1], clear_color[2], 1.0]
@@ -664,6 +673,20 @@ impl App {
         let pipeline_layout = pipeline_info.depth_motion_layout;
         let descriptor_set = descriptor_set_info.base_descriptor_sets[image_index];
 
+        //TODO: sort models to render to ensure the least fragment redraws
+        //TODO: filter models that are obviously outside of the view frustum
+        //TODO: filter models that are occluded completely
+        //TODO: render translucent models
+        let mut opaque_models = vec![];
+        let mut translucent_models = vec![];
+        for model in &frame_info.models_to_render {
+            if model.is_opaque {
+                opaque_models.push(model);
+            } else {
+                translucent_models.push(model);
+            }
+        }
+
         unsafe {
             self.device.cmd_begin_render_pass(*command_buffer, &base_render_pass_info, vk::SubpassContents::INLINE);
 
@@ -671,7 +694,9 @@ impl App {
                 self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
                 self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
 
-                self.scene.render(&self.device, command_buffer, &pipeline_layout, true)?;
+                for model in &opaque_models {
+                    model.render(&self.device, command_buffer, &pipeline_layout, true)?;
+                }
             }
         }
 
@@ -685,7 +710,9 @@ impl App {
                 self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
                 self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
 
-                self.scene.render(&self.device, command_buffer, &pipeline_layout, false)?;
+                for model in &opaque_models {
+                    model.render(&self.device, command_buffer, &pipeline_layout, false)?;
+                }
             }
 
             self.device.cmd_end_render_pass(*command_buffer);

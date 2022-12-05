@@ -12,7 +12,8 @@ use vulkanalia::{
 
 use crate::{
     frame_info::{FrameInfo},
-    app_data::{AppData}
+    app_data::{AppData},
+    buffer::{SingleFrameRenderInfo}
 };
 
 #[derive(Debug)]
@@ -80,14 +81,13 @@ impl GameObject {
         }
     }
 
-    pub fn render(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, view: &glm::DMat4, is_depth_motion_pass: bool) -> Result<()> {
+    pub fn create_frame_render_info(&self, frame_info: &mut SingleFrameRenderInfo, view: &glm::DMat4) -> Result<()> {
         let model = self.transform.as_matrix()?;
         let viewmodel = glm::convert::<glm::DMat4, glm::Mat4>(view * model);
-        let normal_viewmodel = glm::transpose(&glm::inverse(&viewmodel));
 
         for component in self.components.iter() {
             if component.is_enabled() {
-                component.render(device, command_buffer, pipeline_layout, &viewmodel, Some(&normal_viewmodel), self.previous_viewmodel.as_ref(), is_depth_motion_pass)?;
+                component.create_frame_render_info(frame_info, &viewmodel, self.previous_viewmodel.as_ref())?;
             }
         }
 

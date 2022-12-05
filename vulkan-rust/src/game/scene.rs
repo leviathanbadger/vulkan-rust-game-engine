@@ -13,7 +13,8 @@ use vulkanalia::{
 
 use crate::{
     frame_info::{FrameInfo},
-    app_data::{AppData}
+    app_data::{AppData},
+    buffer::{SingleFrameRenderInfo}
 };
 
 #[derive(Debug, Default)]
@@ -62,12 +63,29 @@ impl Scene {
         }
     }
 
-    pub fn render(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, is_depth_motion_pass: bool) -> Result<()> {
+    pub fn create_frame_render_info(&self, frame_info: &mut SingleFrameRenderInfo, bounds: vk::Extent2D) -> Result<()> {
+        let projection = self.render_camera.get_projection_matrix(bounds)?;
+        let previous_projection = *self.render_camera.get_previous_projection_matrix().unwrap_or(&projection);
         let view = self.render_camera.get_view_matrix()?;
+
+        frame_info.proj = projection;
+        frame_info.previous_proj = previous_projection;
+
+        frame_info.clear_color = self.clear_color;
+
+        frame_info.ambient_light = self.ambient_light;
+
+        if let Some(directional_light) = self.directional_light {
+            let normal_matrix = glm::convert::<glm::DMat4, glm::Mat4>(glm::transpose(&glm::inverse(&view)));
+            let actual_direction: glm::Vec3 = (normal_matrix * glm::vec4(directional_light.direction.x, directional_light.direction.y, directional_light.direction.z, 0.0)).xyz();
+
+            frame_info.directional_light_color = directional_light.color;
+            frame_info.directional_light_direction = actual_direction;
+        }
 
         for obj in self.objects.iter() {
             if obj.is_enabled() {
-                obj.render(device, command_buffer, pipeline_layout, &view, is_depth_motion_pass)?;
+                obj.create_frame_render_info(frame_info, &view)?;
             }
         }
 

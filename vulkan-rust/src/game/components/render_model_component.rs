@@ -10,7 +10,7 @@ use crate::{
     game::{
         can_be_enabled::{CanBeEnabled}
     },
-    buffer::{Model, CanBeVertexBufferType},
+    buffer::{Model, CanBeVertexBufferType, SingleFrameRenderInfo},
     app_data::{AppData}
 };
 
@@ -65,9 +65,10 @@ impl<TVert> GameComponent for RenderModelComponent<TVert> where TVert : CanBeVer
         }
     }
 
-    fn render(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, viewmodel: &glm::Mat4, normal_viewmodel: Option<&glm::Mat4>, previous_viewmodel: Option<&glm::Mat4>, is_depth_motion_pass: bool) -> Result<()> {
-        let model = self.model.as_ref().unwrap();
-        model.write_render_to_command_buffer(device, command_buffer, pipeline_layout, viewmodel, normal_viewmodel, previous_viewmodel, is_depth_motion_pass)?;
+    fn create_frame_render_info(&self, frame_info: &mut SingleFrameRenderInfo, viewmodel: &glm::Mat4, previous_viewmodel: Option<&glm::Mat4>) -> Result<()> {
+        if let Some(model) = self.model.as_ref() {
+            model.create_frame_render_info(frame_info, false, true, viewmodel, previous_viewmodel)?;
+        }
 
         Ok(())
     }
