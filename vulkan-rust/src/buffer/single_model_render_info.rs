@@ -14,6 +14,8 @@ pub struct SingleModelRenderInfo {
     pub previous_viewmodel: glm::Mat4,
     pub vertex_buffer: vk::Buffer,
     pub vertex_buffer_offset: vk::DeviceSize,
+    pub inst_vertex_buffer: Option<vk::Buffer>,
+    pub inst_vertex_buffer_offset: vk::DeviceSize,
     pub index_buffer: Option<vk::Buffer>,
     pub index_buffer_offset: vk::DeviceSize,
     pub index_type: vk::IndexType,
@@ -22,13 +24,17 @@ pub struct SingleModelRenderInfo {
     pub indexed_vertex_offset: i32,
 
     //TODO: support instanced rendering
-    pub instance_count: Option<u32>,
+    pub instance_count: u32,
     pub first_instance: u32
 }
 
 impl SingleModelRenderInfo {
     pub unsafe fn render(&self, device: &Device, command_buffer: &vk::CommandBuffer, pipeline_layout: &vk::PipelineLayout, is_depth_motion_pass: bool) -> Result<()> {
-        device.cmd_bind_vertex_buffers(*command_buffer, 0, &[self.vertex_buffer], &[self.vertex_buffer_offset]);
+        if let Some(inst_vertex_buffer) = self.inst_vertex_buffer {
+            device.cmd_bind_vertex_buffers(*command_buffer, 0, &[self.vertex_buffer, inst_vertex_buffer], &[self.vertex_buffer_offset, self.inst_vertex_buffer_offset]);
+        } else {
+            device.cmd_bind_vertex_buffers(*command_buffer, 0, &[self.vertex_buffer], &[self.vertex_buffer_offset]);
+        }
 
         if let Some(index_buffer) = self.index_buffer {
             device.cmd_bind_index_buffer(*command_buffer, index_buffer, self.index_buffer_offset, self.index_type);
@@ -54,12 +60,10 @@ impl SingleModelRenderInfo {
 
         device.cmd_push_constants(*command_buffer, *pipeline_layout, vk::ShaderStageFlags::ALL_GRAPHICS, 0, push_constants_bytes);
 
-        let instance_count = self.instance_count.unwrap_or(1);
-
         if let Some(_index_buffer) = self.index_buffer {
-            device.cmd_draw_indexed(*command_buffer, self.element_count, instance_count, self.first_element, self.indexed_vertex_offset, self.first_instance);
+            device.cmd_draw_indexed(*command_buffer, self.element_count, self.instance_count, self.first_element, self.indexed_vertex_offset, self.first_instance);
         } else {
-            device.cmd_draw(*command_buffer, self.element_count, instance_count, self.first_element, self.first_instance);
+            device.cmd_draw(*command_buffer, self.element_count, self.instance_count, self.first_element, self.first_instance);
         }
 
         Ok(())

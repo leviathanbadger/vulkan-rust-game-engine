@@ -15,8 +15,7 @@ use vulkanalia::{
 use crate::{
     app_data::{AppData},
     shader_input::{
-        {simple},
-        {motion_blur},
+        {simple, marble, motion_blur},
         push_constants::{DepthMotionPushConstants, BaseRenderPushConstants},
         vertex_attribute_builder::{HasVertexAttributeBindings}
     },
@@ -440,7 +439,7 @@ impl BootstrapPipelineLoader {
         }
     }
 
-    fn create_pipeline<TVert: HasVertexAttributeBindings>(&self, mut vertex_shader_source: ShaderSource, mut fragment_shader_source: ShaderSource, device: &Device, extent: vk::Extent2D, layout: vk::PipelineLayout, render_pass: vk::RenderPass, subpass_idx: u32, blend_state_descriptors: &[BlendStateDescriptor], depth_buffer_usage: DepthBufferUsageMode) -> Result<vk::Pipeline> {
+    fn create_pipeline<TVert: HasVertexAttributeBindings, TInstVert: HasVertexAttributeBindings>(&self, mut vertex_shader_source: ShaderSource, mut fragment_shader_source: ShaderSource, device: &Device, extent: vk::Extent2D, layout: vk::PipelineLayout, render_pass: vk::RenderPass, subpass_idx: u32, blend_state_descriptors: &[BlendStateDescriptor], depth_buffer_usage: DepthBufferUsageMode) -> Result<vk::Pipeline> {
         vertex_shader_source = vertex_shader_source.flatten()?;
         let (vert, vert_entry_name) = vertex_shader_source.get_source()?;
         fragment_shader_source = fragment_shader_source.flatten()?;
@@ -464,8 +463,8 @@ impl BootstrapPipelineLoader {
             .module(frag_module)
             .name(frag_entry_name.as_bytes());
 
-        let binding_descriptions = &[TVert::binding_description()];
-        let attribute_descriptions = &TVert::attribute_descriptions();
+        let binding_descriptions = &[TVert::binding_descriptions(), TInstVert::binding_descriptions()].concat()[..];
+        let attribute_descriptions = &[TVert::attribute_descriptions(), TInstVert::attribute_descriptions()].concat()[..];
         let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_binding_descriptions(binding_descriptions)
             .vertex_attribute_descriptions(attribute_descriptions);
@@ -584,8 +583,8 @@ impl BootstrapPipelineLoader {
     fn create_depth_motion_pipeline(&self, device: &Device, pipeline_info: &mut PipelineInfo, extent: vk::Extent2D, descriptor_set_layout: vk::DescriptorSetLayout, render_pass: vk::RenderPass) -> Result<()> {
         debug!("Creating depth+motion pipeline layout and pipeline...");
 
-        let vert_source = ShaderSource::SourcePath(&Path::new("shaders/depth_and_motion/shader.vert.spv"), "main");
-        let frag_source = ShaderSource::SourcePath(&Path::new("shaders/depth_and_motion/shader.frag.spv"), "main");
+        let vert_source = ShaderSource::SourcePath(&Path::new("shaders/depth_and_motion_marble/shader.vert.spv"), "main");
+        let frag_source = ShaderSource::SourcePath(&Path::new("shaders/depth_and_motion_marble/shader.frag.spv"), "main");
 
         let set_layouts = &[descriptor_set_layout][..];
 
@@ -604,7 +603,7 @@ impl BootstrapPipelineLoader {
                 ..Default::default()
             }
         ][..];
-        let pipeline = self.create_pipeline::<simple::Vertex>(vert_source, frag_source, device, extent, pipeline_layout, render_pass, 0, blend_state, DepthBufferUsageMode::WriteIfLess)?;
+        let pipeline = self.create_pipeline::<marble::Vertex, marble::MarbleInstance>(vert_source, frag_source, device, extent, pipeline_layout, render_pass, 0, blend_state, DepthBufferUsageMode::WriteIfLess)?;
 
         debug!("Depth+motion pipeline layout ({:?}) and pipeline ({:?}) created.", pipeline_layout, pipeline);
 
@@ -616,8 +615,8 @@ impl BootstrapPipelineLoader {
     fn create_base_render_pipeline(&self, device: &Device, pipeline_info: &mut PipelineInfo, extent: vk::Extent2D, descriptor_set_layout: vk::DescriptorSetLayout, render_pass: vk::RenderPass) -> Result<()> {
         debug!("Creating base render pipeline layout and pipeline...");
 
-        let vert_source = ShaderSource::SourcePath(&Path::new("shaders/simple/shader.vert.spv"), "main");
-        let frag_source = ShaderSource::SourcePath(&Path::new("shaders/simple/shader.frag.spv"), "main");
+        let vert_source = ShaderSource::SourcePath(&Path::new("shaders/marble/shader.vert.spv"), "main");
+        let frag_source = ShaderSource::SourcePath(&Path::new("shaders/marble/shader.frag.spv"), "main");
 
         let set_layouts = &[descriptor_set_layout][..];
 
@@ -633,7 +632,7 @@ impl BootstrapPipelineLoader {
         let blend_state = &[
             BlendStateDescriptor::default()
         ][..];
-        let pipeline = self.create_pipeline::<simple::Vertex>(vert_source, frag_source, device, extent, pipeline_layout, render_pass, 1, blend_state, DepthBufferUsageMode::WriteIfEqual)?;
+        let pipeline = self.create_pipeline::<marble::Vertex, marble::MarbleInstance>(vert_source, frag_source, device, extent, pipeline_layout, render_pass, 1, blend_state, DepthBufferUsageMode::WriteIfEqual)?;
 
         debug!("Base render pipeline layout ({:?}) and pipeline ({:?}) created.", pipeline_layout, pipeline);
 
@@ -657,7 +656,7 @@ impl BootstrapPipelineLoader {
         let blend_state = &[
             BlendStateDescriptor::default()
         ][..];
-        let pipeline = self.create_pipeline::<motion_blur::Vertex>(vert_source, frag_source, device, extent, pipeline_layout, render_pass, 0, blend_state, DepthBufferUsageMode::DontUse)?;
+        let pipeline = self.create_pipeline::<motion_blur::Vertex, ()>(vert_source, frag_source, device, extent, pipeline_layout, render_pass, 0, blend_state, DepthBufferUsageMode::DontUse)?;
 
         debug!("Postprocessing pipeline layout ({:?}) and pipeline ({:?}) created.", pipeline_layout, pipeline);
 

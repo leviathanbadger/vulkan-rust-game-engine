@@ -184,15 +184,17 @@ impl<T> Buffer<T> where T : Copy + Clone {
     }
 
     pub fn write_submit_to_command_buffer(&self, device: &Device, command_buffer: &vk::CommandBuffer) -> Result<()> {
-        unsafe {
-            let src = self.staging_buffer.unwrap();
-            let dst = self.buffer.unwrap();
-            let regions = vk::BufferCopy::builder()
-                .size(self.used_buffer_size());
-            device.cmd_copy_buffer(*command_buffer, src, dst, &[regions]);
-        }
+        if let (Some(src), Some(dst)) = (self.staging_buffer, self.buffer) {
+            unsafe {
+                let regions = vk::BufferCopy::builder()
+                    .size(self.used_buffer_size());
+                device.cmd_copy_buffer(*command_buffer, src, dst, &[regions]);
+            }
 
-        Ok(())
+            Ok(())
+        } else {
+            Err(anyhow!("Could not unwrap staging or destination buffer."))
+        }
     }
 
     pub fn destroy(&mut self, device: &Device) {

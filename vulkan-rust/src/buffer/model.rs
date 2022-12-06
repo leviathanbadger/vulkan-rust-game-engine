@@ -14,23 +14,29 @@ use vulkanalia::{
 };
 
 use crate::{
-    bootstrap::{CommandPoolsInfo}
+    bootstrap::{CommandPoolsInfo},
+    shader_input::vertex_attribute_builder::{EmptyVertex}
 };
 
 pub trait CanBeVertexBufferType : Copy + Clone + Hash + PartialEq + Eq + ::std::fmt::Debug {
     fn create_vertex_from_opts(pos: glm::Vec3, normal: Option<glm::Vec3>, color: Option<glm::Vec3>, uv: Option<glm::Vec2>, face_normal: Option<glm::Vec3>) -> Self;
 }
+pub trait CanBeInstVertexBufferType : Copy + Clone + Hash + PartialEq + Eq + ::std::fmt::Debug {
+}
+
+impl CanBeInstVertexBufferType for EmptyVertex { }
 
 #[derive(Debug, Copy, Clone)]
-pub struct Model<TVert> where TVert : CanBeVertexBufferType {
+pub struct Model<TVert, TInstVert = EmptyVertex> where TVert : CanBeVertexBufferType, TInstVert : CanBeInstVertexBufferType {
     vertex_buffer: Buffer<TVert>,
+    inst_vertex_buffer: Option<Buffer<TInstVert>>,
     index_buffer_16: Option<Buffer<u16>>,
     index_buffer_32: Option<Buffer<u32>>,
     index_type: vk::IndexType,
     require_submit: bool
 }
 
-impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
+impl<TVert, TInstVert> Model<TVert, TInstVert> where TVert : CanBeVertexBufferType, TInstVert : CanBeInstVertexBufferType {
     pub fn new(max_vertex_count: usize, max_index_count: usize, require_submit: bool) -> Result<Self> {
         let index_buffer_16: Option<Buffer<u16>>;
         let index_buffer_32: Option<Buffer<u32>>;
@@ -50,14 +56,22 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
 
         Ok(Self {
             vertex_buffer: Buffer::<TVert>::new(vk::BufferUsageFlags::VERTEX_BUFFER, max_vertex_count, require_submit),
+            inst_vertex_buffer: None,
             index_buffer_16,
             index_buffer_32,
             index_type,
             require_submit
         })
     }
+    pub fn new_instanced(max_vertex_count: usize, max_inst_vertex_count: usize, max_index_count: usize, require_submit: bool) -> Result<Self> {
+        let mut model = Self::new(max_vertex_count, max_index_count, require_submit)?;
 
-    pub fn new_and_create_from_obj_file<P: AsRef<Path>>(path: P, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pools_info: &CommandPoolsInfo) -> Result<Self> {
+        model.inst_vertex_buffer = Some(Buffer::<TInstVert>::new(vk::BufferUsageFlags::VERTEX_BUFFER, max_inst_vertex_count, require_submit));
+
+        Ok(model)
+    }
+
+    fn new_and_create_from_obj_file_impl<P: AsRef<Path>>(path: P, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pools_info: &CommandPoolsInfo, instances: Option<&impl IntoBufferData<TInstVert>>) -> Result<Self> {
         let obj_file = File::open(path)?;
         let mut reader = BufReader::new(obj_file);
 
@@ -140,13 +154,29 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
             }
         }
 
-        let mut model = Self::new(vertices.len(), indices.len(), true)?;
+        let mut model: Self;
+        if let Some(insts) = instances {
+            model = Self::new_instanced(vertices.len(), insts.element_count(), indices.len(), true)?;
+        } else {
+            model = Self::new(vertices.len(), indices.len(), true)?;
+        }
 
         model.create(device, memory_properties)?;
         model.set_data(device, &vertices, &indices)?;
+
+        if let Some(insts) = instances {
+            model.set_inst_data(device, insts)?;
+        }
+
         model.submit(device, command_pools_info)?;
 
         Ok(model)
+    }
+    pub fn new_and_create_from_obj_file<P: AsRef<Path>>(path: P, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pools_info: &CommandPoolsInfo) -> Result<Self> {
+        Self::new_and_create_from_obj_file_impl(path, device, memory_properties, command_pools_info, None as Option<&Vec<TInstVert>>)
+    }
+    pub fn new_and_create_from_obj_file_instanced<P: AsRef<Path>>(path: P, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pools_info: &CommandPoolsInfo, inst_data: &impl IntoBufferData<TInstVert>) -> Result<Self> {
+        Self::new_and_create_from_obj_file_impl(path, device, memory_properties, command_pools_info, Some(inst_data))
     }
 
     pub fn create(&mut self, device: &Device, memory: &vk::PhysicalDeviceMemoryProperties) -> Result<()> {
@@ -159,6 +189,10 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
         }
 
         self.vertex_buffer.create(device, memory)?;
+
+        if let Some(inst_vertex_buffer) = self.inst_vertex_buffer.as_mut() {
+            inst_vertex_buffer.create(device, memory)?;
+        }
 
         Ok(())
     }
@@ -176,6 +210,15 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
         self.vertex_buffer.set_data(device, vertex_data)?;
 
         Ok(())
+    }
+    pub fn set_inst_data(&mut self, device: &Device, inst_data: &impl IntoBufferData<TInstVert>) -> Result<()> {
+        if let Some(inst_vertex_buffer) = self.inst_vertex_buffer.as_mut() {
+            inst_vertex_buffer.set_data(device, inst_data)?;
+
+            Ok(())
+        } else {
+            Err(anyhow!("Can't set instance data. This Model has no instance vertex type!"))
+        }
     }
 
     pub fn submit(&self, device: &Device, command_pools: &CommandPoolsInfo) -> Result<()> {
@@ -200,6 +243,10 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
 
         self.vertex_buffer.write_submit_to_command_buffer(device, command_buffer)?;
 
+        if let Some(inst_vertex_buffer) = self.inst_vertex_buffer {
+            inst_vertex_buffer.write_submit_to_command_buffer(device, command_buffer)?;
+        }
+
         Ok(())
     }
 
@@ -222,6 +269,13 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
 
         let previous_viewmodel: glm::Mat4 = if let Some(prev_vm) = previous_viewmodel { *prev_vm } else { *viewmodel };
 
+        let mut instance_count = 1;
+        let mut raw_inst_vertex_buffer = None;
+        if let Some(inst_vertex_buffer) = self.inst_vertex_buffer {
+            instance_count = inst_vertex_buffer.used_element_count() as u32;
+            raw_inst_vertex_buffer = unsafe { Some(inst_vertex_buffer.raw_buffer().unwrap()) };
+        }
+
         let model_render_info = SingleModelRenderInfo {
             is_static,
             is_opaque,
@@ -229,10 +283,13 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
             previous_viewmodel,
 
             vertex_buffer: raw_vertex_buffer,
+            inst_vertex_buffer: raw_inst_vertex_buffer,
             index_buffer: Some(raw_index_buffer),
             index_type: self.index_type,
 
             element_count: used_element_count,
+
+            instance_count,
 
             ..Default::default()
         };
@@ -250,5 +307,9 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
         }
 
         self.vertex_buffer.destroy(device);
+
+        if let Some(inst_vertex_buffer) = self.inst_vertex_buffer.as_mut() {
+            inst_vertex_buffer.destroy(device);
+        }
     }
 }

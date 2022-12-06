@@ -16,7 +16,7 @@ layout(push_constant) uniform PushConstants {
 } pcs;
 
 layout(location = 0) in vec3 fragNormal;
-layout(location = 1) in vec3 fragColor;
+layout(location = 1) in vec4 fragColor;
 
 layout(location = 0) out vec4 outColor;
 
@@ -32,5 +32,5 @@ void main() {
     //Diagnose normals
     // outColor = vec4((fragNormal.x + 1.0) / 2.0, (fragNormal.y + 1.0) / 2.0, (fragNormal.z + 1.0) / 2.0, 1.0);
 
-    outColor = vec4(fragColor * light_color, 1.0);
+    outColor = vec4(fragColor.rgb * light_color, 1.0);
 }

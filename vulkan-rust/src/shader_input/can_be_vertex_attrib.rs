@@ -10,11 +10,13 @@ pub trait CanBeVertexAttrib : Sized {
     fn vertex_struct_size() -> usize {
         size_of::<Self>()
     }
-    fn vertex_location_size() -> usize {
-        //TODO: this will be wrong for some matrix types
-        (size_of::<Self>() + 15) / 16
-    }
     fn vertex_format() -> vk::Format;
+    fn vertex_format_repeat() -> usize {
+        (Self::vertex_struct_size() + 15) / 16
+    }
+    fn vertex_format_offset() -> Option<usize> {
+        None
+    }
 }
 
 
@@ -114,5 +116,16 @@ impl CanBeVertexAttrib for glm::IVec4 {
 impl CanBeVertexAttrib for glm::UVec4 {
     fn vertex_format() -> vk::Format {
         vk::Format::R32G32B32A32_UINT
+    }
+}
+
+
+
+impl CanBeVertexAttrib for glm::Mat4 {
+    fn vertex_format() -> vk::Format {
+        vk::Format::R32G32B32A32_SFLOAT
+    }
+    fn vertex_format_offset() -> Option<usize> {
+        Some(size_of::<glm::Vec4>())
     }
 }
