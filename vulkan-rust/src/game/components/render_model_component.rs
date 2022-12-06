@@ -10,7 +10,7 @@ use crate::{
     game::{
         can_be_enabled::{CanBeEnabled}
     },
-    buffer::{Model, CanBeVertexBufferType, SingleFrameRenderInfo},
+    resources::{Model, CanBeVertexBufferType, SingleFrameRenderInfo},
     app_data::{AppData}
 };
 

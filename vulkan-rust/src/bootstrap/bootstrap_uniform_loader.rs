@@ -11,7 +11,7 @@ use crate::{
     shader_input::{
         uniform_buffer_object::UniformBufferObject
     },
-    buffer::{Buffer},
+    resources::{Buffer},
     bootstrap_loader
 };
 

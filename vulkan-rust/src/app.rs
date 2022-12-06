@@ -29,7 +29,7 @@ use crate::{
     shader_input::uniform_buffer_object::{UniformBufferObject},
     game::scene::{Scene},
     frame_info::{FrameInfo},
-    buffer::{SingleFrameRenderInfo}
+    resources::{SingleFrameRenderInfo}
 };
 
 #[derive(Debug, Error)]

@@ -10,7 +10,7 @@ use crate::{
     game::{
         can_be_enabled::{CanBeEnabled}
     },
-    buffer::{Model, SingleFrameRenderInfo},
+    resources::{Model, SingleFrameRenderInfo},
     app_data::{AppData},
     shader_input::marble::{MARBLE_INSTANCES, self}
 };

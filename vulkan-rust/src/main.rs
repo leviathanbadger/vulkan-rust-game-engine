@@ -1,5 +1,5 @@
 mod bootstrap;
-mod buffer;
+mod resources;
 mod game;
 mod scenes;
 mod shader_input;

@@ -8,7 +8,7 @@ use vulkanalia::{
 
 use crate::{
     app_data::{AppData},
-    buffer::{Image2D},
+    resources::{Image2D},
     bootstrap_loader
 };
 

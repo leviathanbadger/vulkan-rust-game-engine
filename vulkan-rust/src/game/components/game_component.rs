@@ -12,7 +12,7 @@ use crate::{
         transform::{Transform}
     },
     app_data::{AppData},
-    buffer::{SingleFrameRenderInfo}
+    resources::{SingleFrameRenderInfo}
 };
 
 pub trait GameComponent : Debug + CanBeEnabled {

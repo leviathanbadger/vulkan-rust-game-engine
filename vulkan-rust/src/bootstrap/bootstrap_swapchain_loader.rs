@@ -10,7 +10,7 @@ use vulkanalia::{
 use crate::{
     app::{GraphicsCardSuitabilityError},
     app_data::{AppData},
-    buffer::{Image2D},
+    resources::{Image2D},
     bootstrap_loader
 };
 

@@ -14,7 +14,7 @@ use vulkanalia::{
 use crate::{
     frame_info::{FrameInfo},
     app_data::{AppData},
-    buffer::{SingleFrameRenderInfo}
+    resources::{SingleFrameRenderInfo}
 };
 
 #[derive(Debug, Default)]

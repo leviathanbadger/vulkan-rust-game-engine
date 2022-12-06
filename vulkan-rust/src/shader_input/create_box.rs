@@ -1,6 +1,6 @@
 use nalgebra_glm as glm;
 
-use crate::buffer::{CanBeVertexBufferType};
+use crate::resources::{CanBeVertexBufferType};
 
 pub fn create_box<TVert: CanBeVertexBufferType>(pos: glm::Vec3, size: glm::Vec3) -> Vec<TVert> {
     let aaa = glm::vec3(pos.x, pos.y, pos.z);

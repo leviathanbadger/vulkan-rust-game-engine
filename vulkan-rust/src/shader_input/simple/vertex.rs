@@ -3,7 +3,7 @@ use lazy_static::{lazy_static};
 
 use crate::{
     vertex_type,
-    buffer::{CanBeVertexBufferType}
+    resources::{CanBeVertexBufferType}
 };
 
 vertex_type!{

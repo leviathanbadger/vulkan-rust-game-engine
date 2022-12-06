@@ -16,7 +16,7 @@ use crate::{
         {motion_blur},
         uniform_buffer_object::{UniformBufferObject}
     },
-    buffer::{Image2D, Buffer},
+    resources::{Image2D, Buffer},
     bootstrap_loader
 };
 

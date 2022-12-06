@@ -4,7 +4,7 @@ use nalgebra_glm as glm;
 use crate::{
     vertex_type,
     game::transform::{Transform},
-    buffer::{CanBeInstVertexBufferType}
+    resources::{CanBeInstVertexBufferType}
 };
 
 vertex_type! {
