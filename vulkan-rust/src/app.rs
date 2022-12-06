@@ -10,7 +10,6 @@ use std::{
 };
 use anyhow::{anyhow, Result};
 use thiserror::Error;
-use nalgebra_glm as glm;
 use winit::{
     dpi::{LogicalSize},
     window::{Window, WindowBuilder},
@@ -27,17 +26,8 @@ use vulkanalia::{
 use crate::{
     app_data::{AppData, VulkanQueueInfo},
     bootstrap::{BootstrapLoader, QueueFamilyIndices},
-    shader_input::{
-        uniform_buffer_object::{UniformBufferObject},
-        {simple}
-    },
-    game::{
-        scene::{Scene},
-        transform::{ORIGIN},
-        game_object::{GameObject},
-        components::{RotateOverTimeComponent, RenderModelComponent, RenderMarbleComponent},
-        lights::{DirectionalLight}
-    },
+    shader_input::uniform_buffer_object::{UniformBufferObject},
+    game::scene::{Scene},
     frame_info::{FrameInfo},
     buffer::{SingleFrameRenderInfo}
 };
@@ -109,7 +99,7 @@ impl App {
             loader.after_create_logical_device(&inst, &device, &window, &mut app_data)?;
         }
 
-        let scene = Self::create_scene()?;
+        let scene = Scene::new();
 
         Ok(Self {
             event_loop: Some(event_loop),
@@ -400,31 +390,6 @@ impl App {
         self.needs_new_swapchain = false;
 
         Ok(())
-    }
-
-    fn create_scene() -> Result<Scene> {
-        let mut scene = Scene::new();
-        // scene.render_camera.transform.pos = glm::vec3(5.0, 5.0, 3.0);
-        scene.render_camera.transform.pos = glm::vec3(2.2, 2.2, 2.0);
-        // scene.render_camera.transform.pos = glm::vec3(1.0, 1.0, 0.75);
-        scene.render_camera.look_at(*ORIGIN);
-        scene.ambient_light = glm::vec3(0.1, 0.1, 0.1);
-        scene.directional_light = Some(DirectionalLight {
-            direction: glm::vec3(-1.0, 0.0, -0.3),
-            color: glm::vec3(1.0, 1.0, 1.0),
-        });
-
-        let mut game_object = Box::new(GameObject::new());
-        game_object.add_component(Box::new(RotateOverTimeComponent::new()))?;
-        // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/die/die-with-uvs.obj")?))?;
-        // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/viking-room/viking-room.obj")?))?;
-        // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/coords/coords.obj")?))?;
-        // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/sphere/sphere.obj")?))?;
-        // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/marbles/bowl.obj")?))?;
-        game_object.add_component(Box::new(RenderMarbleComponent::new("resources/models/marbles/marble.obj")?))?;
-        scene.add_game_object(game_object)?;
-
-        Ok(scene)
     }
 
     //Deliberately not a ref, because the run method needs to own "self"

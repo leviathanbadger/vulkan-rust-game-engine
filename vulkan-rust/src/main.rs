@@ -1,6 +1,7 @@
 mod bootstrap;
 mod buffer;
 mod game;
+mod scenes;
 mod shader_input;
 mod util;
 
@@ -14,6 +15,8 @@ use winit::dpi::{LogicalSize};
 
 use builder::{HasHeapBuilder};
 use app::{App};
+
+use scenes::{marbles};
 
 #[macro_use] extern crate log;
 
@@ -31,6 +34,7 @@ fn main() -> Result<()> {
         builder = builder.add_validation();
     }
 
-    let app = builder.build()?;
+    let mut app = builder.build()?;
+    marbles::create_scene(&mut app.scene)?;
     app.run()
 }
