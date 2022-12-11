@@ -23,14 +23,15 @@ layout(location = 0) out vec4 outColor;
 void main() {
     vec3 light_color = ubo.ambient_light;
 
-    float directional_amt = max(dot(fragNormal, -ubo.directional_light_direction), 0.0);
+    vec3 normal = normalize(fragNormal);
+    float directional_amt = max(dot(normal, -ubo.directional_light_direction), 0.0);
     light_color += ubo.directional_light_color * directional_amt;
 
     //Diagnose lights
     // outColor = vec4(light_color, 1.0);
 
     //Diagnose normals
-    // outColor = vec4((fragNormal.x + 1.0) / 2.0, (fragNormal.y + 1.0) / 2.0, (fragNormal.z + 1.0) / 2.0, 1.0);
+    // outColor = vec4((normal.x + 1.0) / 2.0, (normal.y + 1.0) / 2.0, (normal.z + 1.0) / 2.0, 1.0);
 
     outColor = vec4(fragColor * light_color, 1.0);
 }

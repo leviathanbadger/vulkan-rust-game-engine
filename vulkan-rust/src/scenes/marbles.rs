@@ -4,7 +4,6 @@ use nalgebra_glm as glm;
 use crate::{
     game::{
         scene::{Scene},
-        transform::{ORIGIN},
         lights::{DirectionalLight},
         game_object::{GameObject},
         components::{RotateOverTimeComponent, RenderMarbleComponent, RenderModelComponent}
@@ -16,7 +15,8 @@ pub fn create_scene(scene: &mut Box<Scene>) -> Result<()> {
     // scene.render_camera.transform.pos = glm::vec3(5.0, 5.0, 3.0);
     scene.render_camera.transform.pos = glm::vec3(2.2, 2.2, 2.0);
     // scene.render_camera.transform.pos = glm::vec3(1.0, 1.0, 0.75);
-    scene.render_camera.look_at(*ORIGIN);
+    // scene.render_camera.look_at(*crate::game::transform::ORIGIN);
+    scene.render_camera.look_at(glm::vec3(0.0, 0.0, -0.9));
     scene.ambient_light = glm::vec3(0.1, 0.1, 0.1);
     scene.directional_light = Some(DirectionalLight {
         direction: glm::vec3(-1.0, 0.0, -0.3),

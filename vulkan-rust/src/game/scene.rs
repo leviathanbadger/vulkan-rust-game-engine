@@ -75,8 +75,9 @@ impl Scene {
         frame_info.ambient_light = self.ambient_light;
 
         if let Some(directional_light) = self.directional_light {
+            let dir = directional_light.direction.normalize();
             let normal_matrix = glm::convert::<glm::DMat4, glm::Mat4>(glm::transpose(&glm::inverse(&view)));
-            let actual_direction: glm::Vec3 = (normal_matrix * glm::vec4(directional_light.direction.x, directional_light.direction.y, directional_light.direction.z, 0.0)).xyz();
+            let actual_direction: glm::Vec3 = (normal_matrix * glm::vec4(dir.x, dir.y, dir.z, 0.0)).xyz().normalize();
 
             frame_info.directional_light_color = directional_light.color;
             frame_info.directional_light_direction = actual_direction;

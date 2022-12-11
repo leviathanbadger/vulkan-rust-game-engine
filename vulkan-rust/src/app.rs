@@ -669,18 +669,18 @@ impl App {
         unsafe {
             self.device.cmd_begin_render_pass(*command_buffer, &base_render_pass_info, vk::SubpassContents::INLINE);
 
-            self.render_models(command_buffer, &opaque_models, pipeline_info.depth_motion_layout, descriptor_sets, |mat| mat.depth_motion)?;
+            self.render_models(command_buffer, &opaque_models, pipeline_info.depth_motion_layout, descriptor_sets, true, |mat| mat.depth_motion)?;
 
             self.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
 
-            self.render_models(command_buffer, &opaque_models, pipeline_info.base_render_layout, descriptor_sets, |mat| mat.base_render)?;
+            self.render_models(command_buffer, &opaque_models, pipeline_info.base_render_layout, descriptor_sets, false, |mat| mat.base_render)?;
 
             self.device.cmd_end_render_pass(*command_buffer);
         }
 
         Ok(())
     }
-    unsafe fn render_models(&self, command_buffer: &vk::CommandBuffer, models: &Vec<&SingleModelRenderInfo>, pipeline_layout: vk::PipelineLayout, descriptor_sets: &[vk::DescriptorSet], pipeline_selector: impl Fn(&Material) -> Option<vk::Pipeline>) -> Result<()> {
+    unsafe fn render_models(&self, command_buffer: &vk::CommandBuffer, models: &Vec<&SingleModelRenderInfo>, pipeline_layout: vk::PipelineLayout, descriptor_sets: &[vk::DescriptorSet], is_depth_motion_pass: bool, pipeline_selector: impl Fn(&Material) -> Option<vk::Pipeline>) -> Result<()> {
         let mut current_mat_id = 0u32;
 
         self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, descriptor_sets, &[]);
@@ -701,7 +701,7 @@ impl App {
                 }
             }
 
-            model.render(&self.device, command_buffer, &pipeline_layout, true, &self.resource_loader)?;
+            model.render(&self.device, command_buffer, &pipeline_layout, is_depth_motion_pass, &self.resource_loader)?;
         }
 
         Ok(())
