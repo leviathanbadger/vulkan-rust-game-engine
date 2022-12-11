@@ -24,8 +24,12 @@ pub struct Buffer<T> where T : Copy + Clone {
     staging_buffer: Option<vk::Buffer>,
     staging_buffer_memory: Option<vk::DeviceMemory>,
 
+    is_readonly: bool,
+
     phantom: PhantomData<T>
 }
+
+pub type ReadonlyBuffer = Buffer<u8>;
 
 pub fn get_memory_type_index(memory: &vk::PhysicalDeviceMemoryProperties, properties: vk::MemoryPropertyFlags, requirements: vk::MemoryRequirements) -> Result<u32> {
     (0..memory.memory_type_count)
@@ -50,15 +54,17 @@ impl<T> Buffer<T> where T : Copy + Clone {
             staging_buffer: None,
             staging_buffer_memory: None,
 
+            is_readonly: false,
+
             phantom: PhantomData
         }
     }
 
-    fn allocated_buffer_size(&self) -> u64 {
+    pub fn allocated_buffer_size(&self) -> u64 {
         (size_of::<T>() * self.max_element_count) as u64
     }
 
-    fn used_buffer_size(&self) -> u64 {
+    pub fn used_buffer_size(&self) -> u64 {
         (size_of::<T>() * self.curr_element_count) as u64
     }
 
@@ -145,6 +151,9 @@ impl<T> Buffer<T> where T : Copy + Clone {
         if !is_created {
             return Err(anyhow!("Buffer is not created. Can't call set_data until it is created."));
         }
+        if self.is_readonly {
+            return Err(anyhow!("Buffer is readonly. Can't call set_data!"));
+        }
 
         let count = data.element_count();
         if count > self.max_element_count {
@@ -160,7 +169,6 @@ impl<T> Buffer<T> where T : Copy + Clone {
             Ok(())
         }
     }
-
     unsafe fn set_data_from_ptr(&mut self, device: &Device, data_ptr: *const T, count: usize) -> Result<()> {
         let buff_memory = if self.require_submit { self.staging_buffer_memory.unwrap() } else { self.buffer_memory.unwrap() };
 
@@ -220,6 +228,24 @@ impl<T> Buffer<T> where T : Copy + Clone {
             unsafe {
                 device.free_memory(buff_memory, None);
             }
+        }
+    }
+
+    pub fn reinterpret_readonly(self) -> ReadonlyBuffer {
+        ReadonlyBuffer {
+            usage: self.usage,
+            curr_element_count: self.used_buffer_size() as usize,
+            max_element_count: self.allocated_buffer_size() as usize,
+            buffer: self.buffer,
+            buffer_memory: self.buffer_memory,
+
+            require_submit: self.require_submit,
+            staging_buffer: self.staging_buffer,
+            staging_buffer_memory: self.staging_buffer_memory,
+
+            is_readonly: true,
+
+            phantom: PhantomData
         }
     }
 }

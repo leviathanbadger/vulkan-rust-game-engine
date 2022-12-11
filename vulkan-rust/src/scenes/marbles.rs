@@ -1,12 +1,15 @@
 use anyhow::{Result};
 use nalgebra_glm as glm;
 
-use crate::game::{
-    scene::{Scene},
-    transform::{ORIGIN},
-    lights::{DirectionalLight},
-    game_object::{GameObject},
-    components::{RotateOverTimeComponent, RenderMarbleComponent}
+use crate::{
+    game::{
+        scene::{Scene},
+        transform::{ORIGIN},
+        lights::{DirectionalLight},
+        game_object::{GameObject},
+        components::{RotateOverTimeComponent, RenderMarbleComponent, RenderModelComponent}
+    },
+    shader_input::{simple}
 };
 
 pub fn create_scene(scene: &mut Box<Scene>) -> Result<()> {
@@ -26,7 +29,7 @@ pub fn create_scene(scene: &mut Box<Scene>) -> Result<()> {
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/viking-room/viking-room.obj")?))?;
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/coords/coords.obj")?))?;
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/sphere/sphere.obj")?))?;
-    // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/marbles/bowl.obj")?))?;
+    game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/marbles/bowl.obj")?))?;
     game_object.add_component(Box::new(RenderMarbleComponent::new("resources/models/marbles/marble.obj")?))?;
     scene.add_game_object(game_object)?;
 

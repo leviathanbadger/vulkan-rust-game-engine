@@ -33,7 +33,7 @@ impl CommandPoolsInfo {
         }
     }
 
-    fn submit_command_transient(&self, device: &Device, command_pool: &vk::CommandPool, submit_queue: &vk::Queue, command: impl FnOnce(&vk::CommandBuffer) -> Result<()>) -> Result<()> {
+    fn submit_command_transient<TRet>(&self, device: &Device, command_pool: &vk::CommandPool, submit_queue: &vk::Queue, command: impl FnOnce(&vk::CommandBuffer) -> Result<TRet>) -> Result<TRet> {
         let cmd_buff_info = vk::CommandBufferAllocateInfo::builder()
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_pool(*command_pool)
@@ -47,10 +47,11 @@ impl CommandPoolsInfo {
         let begin_info = vk::CommandBufferBeginInfo::builder()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
+        let retval: TRet;
         unsafe {
             device.begin_command_buffer(command_buffer, &begin_info)?;
 
-            command(&command_buffer)?;
+            retval = command(&command_buffer)?;
 
             device.end_command_buffer(command_buffer)?;
         }
@@ -67,7 +68,7 @@ impl CommandPoolsInfo {
             device.free_command_buffers(*command_pool, command_buffers);
         }
 
-        Ok(())
+        Ok(retval)
     }
 
     pub fn submit_command_transient_sync(&self, device: &Device, command: impl FnOnce(&vk::CommandBuffer) -> Result<()>) -> Result<()> {

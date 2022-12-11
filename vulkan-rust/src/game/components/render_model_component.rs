@@ -1,39 +1,47 @@
 use super::{GameComponent};
 
+use std::marker::{PhantomData};
 use nalgebra_glm as glm;
 use anyhow::{Result};
-use vulkanalia::{
-    prelude::v1_0::*
-};
 
 use crate::{
     game::{
         can_be_enabled::{CanBeEnabled}
     },
-    resources::{Model, CanBeVertexBufferType, SingleFrameRenderInfo},
-    app_data::{AppData}
+    resources::{CanBeVertexBufferType, CanBeInstVertexBufferType, SingleFrameRenderInfo, MaterialRef, ModelRef, MaterialProperties, ModelProperties, ResourceLoader},
+    shader_input::vertex_attribute_builder::{EmptyVertex}
 };
 
 #[derive(Debug)]
-pub struct RenderModelComponent<TVert> where TVert : CanBeVertexBufferType + 'static {
+pub struct RenderModelComponent<TVert, TInstVert = EmptyVertex> where TVert : CanBeVertexBufferType + 'static, TInstVert : CanBeInstVertexBufferType {
     enabled: bool,
     is_loaded: bool,
     path: &'static str,
-    model: Option<Model<TVert>>
+
+    phantom_vert: PhantomData<TVert>,
+    phantom_inst_vert: PhantomData<TInstVert>,
+
+    material: Option<MaterialRef>,
+    model: Option<ModelRef>
 }
 
-impl<TVert> RenderModelComponent<TVert> where TVert : CanBeVertexBufferType {
+impl<TVert, TInstVert> RenderModelComponent<TVert, TInstVert> where TVert : CanBeVertexBufferType + 'static, TInstVert : CanBeInstVertexBufferType {
     pub fn new(path: &'static str) -> Result<Self> {
         Ok(Self {
             enabled: true,
             is_loaded: false,
             path: path,
-            model: None
+
+            phantom_vert: Default::default(),
+            phantom_inst_vert: Default::default(),
+
+            model: None,
+            material: None
         })
     }
 }
 
-impl<TVert> CanBeEnabled for RenderModelComponent<TVert> where TVert : CanBeVertexBufferType {
+impl<TVert, TInstVert> CanBeEnabled for RenderModelComponent<TVert, TInstVert> where TVert : CanBeVertexBufferType + 'static, TInstVert : CanBeInstVertexBufferType {
     fn is_enabled(&self) -> bool {
         self.enabled
     }
@@ -42,32 +50,50 @@ impl<TVert> CanBeEnabled for RenderModelComponent<TVert> where TVert : CanBeVert
     }
 }
 
-impl<TVert> GameComponent for RenderModelComponent<TVert> where TVert : CanBeVertexBufferType {
-    fn load_and_unload(&mut self, device: &Device, app_data: &AppData) -> Result<()> {
+impl<TVert, TInstVert> GameComponent for RenderModelComponent<TVert, TInstVert> where TVert : CanBeVertexBufferType + 'static, TInstVert : CanBeInstVertexBufferType {
+    fn load_and_unload(&mut self, resource_loader: &mut ResourceLoader) -> Result<()> {
         if self.is_loaded {
             return Ok(());
         }
 
-        let command_pools_info = &app_data.command_pools.as_ref().unwrap();
-        let model = Model::<TVert>::new_and_create_from_obj_file(self.path, device, &app_data.memory_properties, command_pools_info)?;
-        self.model = Some(model);
+        let mat_props = MaterialProperties::<TVert, TInstVert> {
+            ..Default::default()
+        };
+
+        self.material = Some(resource_loader.get_or_load_material(&mat_props)?);
+
+        let model_props = ModelProperties::<TVert> {
+            obj_path: Some(self.path.to_owned()),
+            ..Default::default()
+        };
+
+        self.model = Some(resource_loader.get_or_load_model(&model_props)?);
+
+        // let command_pools_info = &app_data.command_pools.as_ref().unwrap();
+        // let model = Model::<TVert>::new_and_create_from_obj_file(self.path, device, &app_data.memory_properties, command_pools_info)?;
+        // self.model = Some(model);
 
         self.is_loaded = true;
         Ok(())
     }
 
-    fn unload(&mut self, device: &Device) -> () {
+    fn unload(&mut self, resource_loader: &mut ResourceLoader) -> () {
         if self.is_loaded {
-            if let Some(mut model) = self.model.take() {
-                model.destroy(device);
+            if let Some(model) = self.model.take() {
+                resource_loader.unload_model(model);
             }
+
+            if let Some(material) = self.material.take() {
+                resource_loader.unload_material(material);
+            }
+
             self.is_loaded = false;
         }
     }
 
     fn create_frame_render_info(&self, frame_info: &mut SingleFrameRenderInfo, viewmodel: &glm::Mat4, previous_viewmodel: Option<&glm::Mat4>) -> Result<()> {
-        if let Some(model) = self.model.as_ref() {
-            model.create_frame_render_info(frame_info, false, true, viewmodel, previous_viewmodel)?;
+        if let (Some(material), Some(model)) = (self.material, self.model) {
+            model.create_frame_render_info(frame_info, material, false, true, viewmodel, previous_viewmodel)?;
         }
 
         Ok(())

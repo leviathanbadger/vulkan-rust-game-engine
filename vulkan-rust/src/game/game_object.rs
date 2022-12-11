@@ -6,14 +6,10 @@ use super::{
 
 use nalgebra_glm as glm;
 use anyhow::{Result};
-use vulkanalia::{
-    prelude::v1_0::*
-};
 
 use crate::{
     frame_info::{FrameInfo},
-    app_data::{AppData},
-    resources::{SingleFrameRenderInfo}
+    resources::{SingleFrameRenderInfo, ResourceLoader}
 };
 
 #[derive(Debug)]
@@ -65,19 +61,19 @@ impl GameObject {
         Ok(())
     }
 
-    pub fn load_and_unload(&mut self, device: &Device, app_data: &AppData) -> Result<()> {
+    pub fn load_and_unload(&mut self, resource_loader: &mut ResourceLoader) -> Result<()> {
         for component in self.components.iter_mut() {
             if component.is_enabled() {
-                component.load_and_unload(device, app_data)?;
+                component.load_and_unload(resource_loader)?;
             }
         }
 
         Ok(())
     }
 
-    pub fn unload(&mut self, device: &Device) -> () {
+    pub fn unload(&mut self, resource_loader: &mut ResourceLoader) -> () {
         for component in self.components.iter_mut() {
-            component.unload(device);
+            component.unload(resource_loader);
         }
     }
 

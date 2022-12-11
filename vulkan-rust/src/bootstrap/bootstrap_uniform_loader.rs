@@ -41,7 +41,7 @@ impl BootstrapUniformLoader {
         let sampler_binding = vk::DescriptorSetLayoutBinding::builder()
             .binding(1)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .descriptor_count(2)
+            .descriptor_count(3)
             .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS);
 
         let bindings = &[ubo_binding, sampler_binding];

@@ -13,8 +13,7 @@ use vulkanalia::{
 
 use crate::{
     frame_info::{FrameInfo},
-    app_data::{AppData},
-    resources::{SingleFrameRenderInfo}
+    resources::{SingleFrameRenderInfo, ResourceLoader}
 };
 
 #[derive(Debug, Default)]
@@ -47,19 +46,19 @@ impl Scene {
         Ok(())
     }
 
-    pub fn load_and_unload(&mut self, device: &Device, app_data: &AppData) -> Result<()> {
+    pub fn load_and_unload(&mut self, resource_loader: &mut ResourceLoader) -> Result<()> {
         for obj in self.objects.iter_mut() {
             if obj.is_enabled() {
-                obj.load_and_unload(device, app_data)?;
+                obj.load_and_unload(resource_loader)?;
             }
         }
 
         Ok(())
     }
 
-    pub fn unload(&mut self, device: &Device) -> () {
+    pub fn unload(&mut self, resource_loader: &mut ResourceLoader) -> () {
         for obj in self.objects.iter_mut() {
-            obj.unload(device);
+            obj.unload(resource_loader);
         }
     }
 

@@ -29,7 +29,7 @@ use crate::{
     shader_input::uniform_buffer_object::{UniformBufferObject},
     game::scene::{Scene},
     frame_info::{FrameInfo},
-    resources::{SingleFrameRenderInfo}
+    resources::{SingleFrameRenderInfo, ResourceLoader, SingleModelRenderInfo, Material}
 };
 
 #[derive(Debug, Error)]
@@ -49,6 +49,7 @@ pub struct App {
     pub bootstrap_loaders: Vec<Box<dyn BootstrapLoader>>,
 
     pub scene: Box<Scene>,
+    pub resource_loader: ResourceLoader,
     pub frame_info: FrameInfo,
 
     destroying: bool,
@@ -100,8 +101,9 @@ impl App {
         }
 
         let scene = Scene::new();
+        let resource_loader = ResourceLoader::new(device.clone(), app_data.memory_properties);
 
-        Ok(Self {
+        let app = Self {
             event_loop: Some(event_loop),
             window,
             app_data,
@@ -111,12 +113,15 @@ impl App {
             bootstrap_loaders: bootstrap_loaders,
 
             scene: Box::new(scene),
+            resource_loader,
             frame_info: FrameInfo::default(),
 
             destroying: false,
             needs_new_swapchain: false,
             shutdown_requested: Arc::new(AtomicBool::new(false))
-        })
+        };
+
+        Ok(app)
     }
 
     unsafe fn create_instance(initial_title: &str, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, window: &Window, app_data: &mut AppData, entry: &Entry) -> Result<Instance> {
@@ -465,7 +470,10 @@ impl App {
             self.scene.tick(&self.frame_info)?;
             self.frame_info.last_frame_start_time = self.frame_info.current_frame_time;
 
-            self.scene.load_and_unload(&self.device, &self.app_data)?;
+            {
+                self.scene.load_and_unload(&mut self.resource_loader)?;
+                self.resource_loader.tick(&self.app_data)?;
+            }
 
             let bounds = self.app_data.render_images.as_ref().unwrap().base_render_extent;
             let frame_render_info = self.create_frame_render_info(bounds)?;
@@ -598,14 +606,19 @@ impl App {
     }
 
     fn update_command_buffer(&self, image_index: usize, command_buffer: &vk::CommandBuffer, frame_info: &SingleFrameRenderInfo) -> Result<()> {
-        let render_extent = self.app_data.render_images.as_ref().unwrap().base_render_extent;
-        let swapchain_extent = self.app_data.swapchain.as_ref().unwrap().extent;
-
         let descriptor_set_info = &self.app_data.descriptor_sets.as_ref().unwrap();
 
-        let pipeline_info = &self.app_data.pipeline.as_ref().unwrap();
-
         let framebuffer_info = &self.app_data.framebuffer.as_ref().unwrap();
+
+        self.render_base(command_buffer, &framebuffer_info.base_render_framebuffers[image_index], &[descriptor_set_info.base_descriptor_sets[image_index]], frame_info)?;
+
+        self.render_postprocessing(command_buffer, &framebuffer_info.postprocessing_framebuffers[image_index], &[descriptor_set_info.postprocessing_descriptor_sets[image_index]])?;
+
+        Ok(())
+    }
+    fn render_base(&self, command_buffer: &vk::CommandBuffer, framebuffer: &vk::Framebuffer, descriptor_sets: &[vk::DescriptorSet], frame_info: &SingleFrameRenderInfo) -> Result<()> {
+        let pipeline_info = &self.app_data.pipeline.as_ref().unwrap();
+        let render_extent = self.app_data.render_images.as_ref().unwrap().base_render_extent;
 
         let base_render_area = vk::Rect2D::builder()
             .offset(vk::Offset2D::default())
@@ -632,18 +645,15 @@ impl App {
         let base_render_clear_values = &[color_clear_value, motion_clear_value, depth_clear_value];
         let base_render_pass_info = vk::RenderPassBeginInfo::builder()
             .render_pass(pipeline_info.base_render_pass)
-            .framebuffer(framebuffer_info.base_render_framebuffers[image_index])
+            .framebuffer(*framebuffer)
             .render_area(base_render_area)
             .clear_values(base_render_clear_values);
-
-        let pipeline = pipeline_info.depth_motion_pipeline;
-        let pipeline_layout = pipeline_info.depth_motion_layout;
-        let descriptor_set = descriptor_set_info.base_descriptor_sets[image_index];
 
         //TODO: sort models to render to ensure the least fragment redraws
         //TODO: filter models that are obviously outside of the view frustum
         //TODO: filter models that are occluded completely
         //TODO: render translucent models
+
         let mut opaque_models = vec![];
         let mut translucent_models = vec![];
         for model in &frame_info.models_to_render {
@@ -654,36 +664,51 @@ impl App {
             }
         }
 
+        opaque_models.sort_by(|a, b| a.material.get_id().cmp(&b.material.get_id()));
+
         unsafe {
             self.device.cmd_begin_render_pass(*command_buffer, &base_render_pass_info, vk::SubpassContents::INLINE);
 
-            {
-                self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
-                self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
+            self.render_models(command_buffer, &opaque_models, pipeline_info.depth_motion_layout, descriptor_sets, |mat| mat.depth_motion)?;
 
-                for model in &opaque_models {
-                    model.render(&self.device, command_buffer, &pipeline_layout, true)?;
-                }
-            }
-        }
-
-        let pipeline = pipeline_info.base_render_pipeline;
-        let pipeline_layout = pipeline_info.base_render_layout;
-
-        unsafe {
             self.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
 
-            {
-                self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
-                self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
-
-                for model in &opaque_models {
-                    model.render(&self.device, command_buffer, &pipeline_layout, false)?;
-                }
-            }
+            self.render_models(command_buffer, &opaque_models, pipeline_info.base_render_layout, descriptor_sets, |mat| mat.base_render)?;
 
             self.device.cmd_end_render_pass(*command_buffer);
         }
+
+        Ok(())
+    }
+    unsafe fn render_models(&self, command_buffer: &vk::CommandBuffer, models: &Vec<&SingleModelRenderInfo>, pipeline_layout: vk::PipelineLayout, descriptor_sets: &[vk::DescriptorSet], pipeline_selector: impl Fn(&Material) -> Option<vk::Pipeline>) -> Result<()> {
+        let mut current_mat_id = 0u32;
+
+        self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, descriptor_sets, &[]);
+
+        for model in models {
+            let mat = model.material;
+            if mat.get_id() != current_mat_id {
+                let render_mat = self.resource_loader.get_render_material(mat);
+                if let Some(render_mat) = render_mat {
+                    if let Some(pipeline) = pipeline_selector(&render_mat) {
+                        current_mat_id = mat.get_id();
+                        self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+            }
+
+            model.render(&self.device, command_buffer, &pipeline_layout, true, &self.resource_loader)?;
+        }
+
+        Ok(())
+    }
+    fn render_postprocessing(&self, command_buffer: &vk::CommandBuffer, framebuffer: &vk::Framebuffer, descriptor_sets: &[vk::DescriptorSet]) -> Result<()> {
+        let pipeline_info = &self.app_data.pipeline.as_ref().unwrap();
+        let swapchain_extent = self.app_data.swapchain.as_ref().unwrap().extent;
 
         let postprocessing_area = vk::Rect2D::builder()
             .offset(vk::Offset2D::default())
@@ -697,20 +722,22 @@ impl App {
         let postprocessing_clear_values = &[postprocessing_color_clear_value];
         let postprocessing_pass_info = vk::RenderPassBeginInfo::builder()
             .render_pass(pipeline_info.postprocessing_render_pass)
-            .framebuffer(framebuffer_info.postprocessing_framebuffers[image_index])
+            .framebuffer(*framebuffer)
             .render_area(postprocessing_area)
             .clear_values(postprocessing_clear_values);
 
+        let pipeline_info = &self.app_data.pipeline.as_ref().unwrap();
         let pipeline = pipeline_info.postprocessing_pipeline;
         let pipeline_layout = pipeline_info.postprocessing_layout;
-        let descriptor_set = descriptor_set_info.postprocessing_descriptor_sets[image_index];
+
+        let descriptor_set_info = &self.app_data.descriptor_sets.as_ref().unwrap();
 
         unsafe {
             self.device.cmd_begin_render_pass(*command_buffer, &postprocessing_pass_info, vk::SubpassContents::INLINE);
 
             {
                 self.device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
-                self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, &[descriptor_set], &[]);
+                self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, descriptor_sets, &[]);
 
                 let buffer = &descriptor_set_info.postprocessing_vertex_buffer;
                 let raw_buffer = buffer.raw_buffer().unwrap();
@@ -743,7 +770,8 @@ impl App {
         unsafe {
             self.device.device_wait_idle().unwrap();
 
-            self.scene.unload(&self.device);
+            self.scene.unload(&mut self.resource_loader);
+            self.resource_loader.force_unload_all();
 
             for loader in self.bootstrap_loaders.iter().rev() {
                 loader.before_destroy_logical_device(&self.inst, &self.device, &mut self.app_data);
@@ -767,12 +795,13 @@ impl App {
     }
 }
 
+//TODO: add asynchronous loading of assets; move asset loading onto other threads (placeholder models/textures if things don't load fast enough)
+
 //TODO: render at a lower resolution than the swapchain-created images
 //TODO: only create one sampler resource, not one per image
 //TODO: use bindless rendering to support multiple textures
 //TODO: learn to use (and actually use) HDR color space
 //TODO: deprecate static_screen_space shader, or update it to use screen coordinates and support textures/ETC
-//TODO: add asynchronous loading of assets; move asset loading onto other threads (placeholder models/textures if things don't load fast enough)
 //TODO: single location for GPU memory management (allocation/freeing)
 //TODO: improve game object abstraction
 //TODO: add support for keyboard/mouse input

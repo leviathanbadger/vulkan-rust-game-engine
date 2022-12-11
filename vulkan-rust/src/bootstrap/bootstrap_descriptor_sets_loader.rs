@@ -1,10 +1,9 @@
 use super::{BootstrapLoader, BootstrapUniformLoader, BootstrapCommandBufferLoader, CommandPoolsInfo};
 use std::{
     mem::{size_of},
-    path::{Path},
     fs::{File}
 };
-use anyhow::{Result};
+use anyhow::{anyhow, Result};
 use winit::window::{Window};
 use vulkanalia::{
     prelude::v1_0::*
@@ -23,7 +22,9 @@ use crate::{
 #[derive(Debug, Default)]
 pub struct DescriptorSetInfo {
     pub diffuse: Image2D,
+    pub normal: Image2D,
     pub occlusion_roughness_metallic: Image2D,
+
     pub base_descriptor_sets: Vec<vk::DescriptorSet>,
     pub postprocessing_descriptor_sets: Vec<vk::DescriptorSet>,
 
@@ -37,8 +38,8 @@ bootstrap_loader! {
 }
 
 impl BootstrapDescriptorSetLoader {
-    fn load_image<P: AsRef<Path>>(&self, path: P, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pools_info: &CommandPoolsInfo) -> Result<Image2D> {
-        let image_file = File::open(path)?;
+    fn load_image(&self, path: &'static str, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pools_info: &CommandPoolsInfo) -> Result<Image2D> {
+        let image_file = File::open(path).map_err(|_| anyhow!("Problem loading PNG file at \"{:?}\"", path))?;
 
         let mut decoder = png::Decoder::new(image_file);
         decoder.set_ignore_text_chunk(true);
@@ -54,16 +55,21 @@ impl BootstrapDescriptorSetLoader {
         let memory_properties = &app_data.memory_properties;
         let command_pools_info = app_data.command_pools.as_ref().unwrap();
 
-        descriptor_sets_info.diffuse = self.load_image("resources/models/die/die_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info)?;
+        // descriptor_sets_info.diffuse = self.load_image("resources/models/die/die_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info)?;
+        // descriptor_sets_info.occlusion_roughness_metallic = self.load_image("resources/models/die/die_DefaultMaterial_OcclusionRoughnessMetallic.png", device, memory_properties, command_pools_info)?;
         // descriptor_sets_info.diffuse = self.load_image("resources/models/viking-room/viking-room.png", device, memory_properties, command_pools_info)?;
         // descriptor_sets_info.diffuse = self.load_image("resources/models/sphere/sphere_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info)?;
-        descriptor_sets_info.occlusion_roughness_metallic = self.load_image("resources/models/die/die_DefaultMaterial_OcclusionRoughnessMetallic.png", device, memory_properties, command_pools_info)?;
+
+        descriptor_sets_info.diffuse = self.load_image("resources/models/marbles/bowl_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info)?;
+        descriptor_sets_info.normal = self.load_image("resources/models/marbles/bowl_DefaultMaterial_Normal.png", device, memory_properties, command_pools_info)?;
+        descriptor_sets_info.occlusion_roughness_metallic = self.load_image("resources/models/marbles/bowl_DefaultMaterial_OcclusionRoughnessMetallic.png", device, memory_properties, command_pools_info)?;
 
         Ok(())
     }
 
     fn destroy_images(&self, device: &Device, descriptor_sets_info: &mut DescriptorSetInfo) -> () {
         descriptor_sets_info.diffuse.destroy(device);
+        descriptor_sets_info.normal.destroy(device);
         descriptor_sets_info.occlusion_roughness_metallic.destroy(device);
     }
 
@@ -97,6 +103,7 @@ impl BootstrapDescriptorSetLoader {
 
             let image_info = &[
                 descriptor_sets_info.diffuse.get_descriptor_image_info(),
+                descriptor_sets_info.normal.get_descriptor_image_info(),
                 descriptor_sets_info.occlusion_roughness_metallic.get_descriptor_image_info()
             ];
             let sampler_write = vk::WriteDescriptorSet::builder()

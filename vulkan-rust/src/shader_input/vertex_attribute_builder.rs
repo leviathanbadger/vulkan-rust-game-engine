@@ -72,7 +72,7 @@ impl VertexAttributeBuilder {
     }
 
     pub fn finalize_bindings(&mut self) -> &mut Self {
-        if self.bindings.len() == 0 {
+        if self.bindings.len() == 0 && self.attrs.len() > 0 {
             let normal_binding = vk::VertexInputBindingDescription::builder()
                 .binding(self.binding)
                 .stride(self.offset as u32)
@@ -101,11 +101,11 @@ pub trait HasVertexAttributeBindings {
 
 impl HasVertexAttributeBindings for () {
     fn binding_descriptions() -> &'static [vk::VertexInputBindingDescription] {
-        &[][..]
+        &[]
     }
 
     fn attribute_descriptions() -> &'static [vk::VertexInputAttributeDescription] {
-        &[][..]
+        &[]
     }
 }
 
