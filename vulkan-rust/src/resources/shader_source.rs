@@ -153,7 +153,7 @@ pub fn create_shader_module(device: &Device, bytecode: &[u8]) -> Result<vk::Shad
     }
 }
 
-pub fn create_pipeline(mut vertex_shader_source: ShaderSource, mut fragment_shader_source: ShaderSource, device: &Device, extent: vk::Extent2D, layout: vk::PipelineLayout, render_pass: vk::RenderPass, subpass_idx: u32, blend_state_descriptors: &[BlendStateDescriptor], depth_buffer_usage: DepthBufferUsageMode, binding_descriptions: &[impl vk::Cast<Target = vk::VertexInputBindingDescription>], attribute_descriptions: &[impl vk::Cast<Target = vk::VertexInputAttributeDescription>]) -> Result<vk::Pipeline> {
+pub fn create_pipeline(mut vertex_shader_source: ShaderSource, mut fragment_shader_source: ShaderSource, device: &Device, extent: Option<vk::Extent2D>, layout: vk::PipelineLayout, render_pass: vk::RenderPass, subpass_idx: u32, blend_state_descriptors: &[BlendStateDescriptor], depth_buffer_usage: DepthBufferUsageMode, binding_descriptions: &[impl vk::Cast<Target = vk::VertexInputBindingDescription>], attribute_descriptions: &[impl vk::Cast<Target = vk::VertexInputAttributeDescription>]) -> Result<vk::Pipeline> {
     vertex_shader_source = vertex_shader_source.flatten()?;
     let (vert, vert_entry_name) = vertex_shader_source.get_source()?;
     fragment_shader_source = fragment_shader_source.flatten()?;
@@ -185,17 +185,19 @@ pub fn create_pipeline(mut vertex_shader_source: ShaderSource, mut fragment_shad
         .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
         .primitive_restart_enable(false);
 
+    let viewport_extent = extent.unwrap_or(vk::Extent2D { width: 1920, height: 1080 }); //Default is only used as a placeholder, because it'll be set dynamically
+
     let viewport = vk::Viewport::builder()
         .x(0.0)
         .y(0.0)
-        .width(extent.width as f32)
-        .height(extent.height as f32)
+        .width(viewport_extent.width as f32)
+        .height(viewport_extent.height as f32)
         .min_depth(0.0)
         .max_depth(1.0);
 
     let scissor = vk::Rect2D::builder()
         .offset(vk::Offset2D { x: 0, y: 0 })
-        .extent(extent);
+        .extent(viewport_extent);
 
     let viewports = &[viewport];
     let scissors = &[scissor];
@@ -237,6 +239,15 @@ pub fn create_pipeline(mut vertex_shader_source: ShaderSource, mut fragment_shad
         .attachments(&blend_state_attachments[..])
         .blend_constants([0.0, 0.0, 0.0, 0.0]);
 
+    let mut dynamic_states = vec![];
+    if extent.is_none() {
+        dynamic_states.push(vk::DynamicState::VIEWPORT);
+        dynamic_states.push(vk::DynamicState::SCISSOR);
+    }
+
+    let dynamic_state = vk::PipelineDynamicStateCreateInfo::builder()
+        .dynamic_states(&dynamic_states[..]);
+
     let stages = &[vert_stage, frag_stage];
     let mut pipeline_create_info = vk::GraphicsPipelineCreateInfo::builder()
         .stages(stages)
@@ -246,6 +257,7 @@ pub fn create_pipeline(mut vertex_shader_source: ShaderSource, mut fragment_shad
         .rasterization_state(&rasterization_state)
         .multisample_state(&multisample_state)
         .color_blend_state(&color_blend_state)
+        .dynamic_state(&dynamic_state)
         .layout(layout)
         .render_pass(render_pass)
         .subpass(subpass_idx)

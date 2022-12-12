@@ -669,21 +669,23 @@ impl App {
         unsafe {
             self.device.cmd_begin_render_pass(*command_buffer, &base_render_pass_info, vk::SubpassContents::INLINE);
 
-            self.render_models(command_buffer, &opaque_models, pipeline_info.depth_motion_layout, descriptor_sets, true, |mat| mat.depth_motion)?;
+            self.render_models(command_buffer, &opaque_models, pipeline_info.depth_motion_layout, descriptor_sets, true, render_extent, |mat| mat.depth_motion)?;
 
             self.device.cmd_next_subpass(*command_buffer, vk::SubpassContents::INLINE);
 
-            self.render_models(command_buffer, &opaque_models, pipeline_info.base_render_layout, descriptor_sets, false, |mat| mat.base_render)?;
+            self.render_models(command_buffer, &opaque_models, pipeline_info.base_render_layout, descriptor_sets, false, render_extent, |mat| mat.base_render)?;
 
             self.device.cmd_end_render_pass(*command_buffer);
         }
 
         Ok(())
     }
-    unsafe fn render_models(&self, command_buffer: &vk::CommandBuffer, models: &Vec<&SingleModelRenderInfo>, pipeline_layout: vk::PipelineLayout, descriptor_sets: &[vk::DescriptorSet], is_depth_motion_pass: bool, pipeline_selector: impl Fn(&Material) -> Option<vk::Pipeline>) -> Result<()> {
+    unsafe fn render_models(&self, command_buffer: &vk::CommandBuffer, models: &Vec<&SingleModelRenderInfo>, pipeline_layout: vk::PipelineLayout, descriptor_sets: &[vk::DescriptorSet], is_depth_motion_pass: bool, extent: vk::Extent2D, pipeline_selector: impl Fn(&Material) -> Option<vk::Pipeline>) -> Result<()> {
         let mut current_mat_id = 0u32;
 
         self.device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline_layout, 0, descriptor_sets, &[]);
+
+        let mut is_viewport_scissor_set = false;
 
         for model in models {
             let mat = model.material;
@@ -699,6 +701,25 @@ impl App {
                 } else {
                     continue;
                 }
+            }
+
+            if !is_viewport_scissor_set {
+                let viewport = vk::Viewport::builder()
+                    .x(0.0)
+                    .y(0.0)
+                    .width(extent.width as f32)
+                    .height(extent.height as f32)
+                    .min_depth(0.0)
+                    .max_depth(1.0);
+
+                let scissor = vk::Rect2D::builder()
+                    .offset(vk::Offset2D { x: 0, y: 0 })
+                    .extent(extent);
+
+                self.device.cmd_set_viewport(*command_buffer, 0, &[viewport]);
+                self.device.cmd_set_scissor(*command_buffer, 0, &[scissor]);
+
+                is_viewport_scissor_set = true;
             }
 
             model.render(&self.device, command_buffer, &pipeline_layout, is_depth_motion_pass, &self.resource_loader)?;
@@ -796,11 +817,12 @@ impl App {
 }
 
 //TODO: add asynchronous loading of assets; move asset loading onto other threads (placeholder models/textures if things don't load fast enough)
-
+//TODO: decouple render target format from swapchain format
+//TODO: learn to use (and actually use) HDR color space
 //TODO: render at a lower resolution than the swapchain-created images
+
 //TODO: only create one sampler resource, not one per image
 //TODO: use bindless rendering to support multiple textures
-//TODO: learn to use (and actually use) HDR color space
 //TODO: deprecate static_screen_space shader, or update it to use screen coordinates and support textures/ETC
 //TODO: single location for GPU memory management (allocation/freeing)
 //TODO: improve game object abstraction

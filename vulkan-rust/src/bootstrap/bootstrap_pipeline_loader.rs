@@ -189,17 +189,17 @@ impl BootstrapPipelineLoader {
         }
     }
 
-    fn create_render_passes(&self, device: &Device, pipeline_info: &mut PipelineInfo, app_data: &AppData) -> Result<()> {
-        debug!("Creating render passes...");
+    fn create_base_render_pass(&self, device: &Device, pipeline_info: &mut PipelineInfo, app_data: &AppData) -> Result<()> {
+        debug!("Creating base render pass...");
 
-        let swapchain_format = app_data.swapchain.as_ref().unwrap().surface_format.format;
         let render_images_info = &app_data.render_images.as_ref().unwrap();
+        let base_render_format = render_images_info.base_render_format();
         let depth_buffer_format = render_images_info.depth_stencil_format();
         let motion_vector_format = render_images_info.motion_vector_format();
 
         let color_attachments = &[
             AttachmentDescriptor {
-                format: swapchain_format,
+                format: base_render_format,
                 final_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                 ..Default::default()
             },
@@ -261,6 +261,16 @@ impl BootstrapPipelineLoader {
         ][..];
         let base_render_pass = self.create_render_pass(device, color_attachments, Some(&depth_attachment), subpasses, subpass_dependencies)?;
 
+        debug!("Base render pass created: {:?}", base_render_pass);
+        pipeline_info.base_render_pass = base_render_pass;
+
+        Ok(())
+    }
+    fn create_postprocessing_render_pass(&self, device: &Device, pipeline_info: &mut PipelineInfo, app_data: &AppData) -> Result<()> {
+        debug!("Creating postprocessing render pass...");
+
+        let swapchain_format = app_data.swapchain.as_ref().unwrap().surface_format.format;
+
         let color_attachments = &[
             AttachmentDescriptor {
                 format: swapchain_format,
@@ -283,22 +293,24 @@ impl BootstrapPipelineLoader {
             }
         ][..];
         let subpass_dependencies = &[][..];
-        let motion_blur_render_pass = self.create_render_pass(device, color_attachments, None, subpasses, subpass_dependencies)?;
+        let postprocessing_render_pass = self.create_render_pass(device, color_attachments, None, subpasses, subpass_dependencies)?;
 
-        debug!("Render passes created: {:?}, {:?}", base_render_pass, motion_blur_render_pass);
-        pipeline_info.base_render_pass = base_render_pass;
-        pipeline_info.postprocessing_render_pass = motion_blur_render_pass;
+        debug!("Postprocessing render pass created: {:?}", postprocessing_render_pass);
+        pipeline_info.postprocessing_render_pass = postprocessing_render_pass;
 
         Ok(())
     }
 
-    fn destroy_render_passes(&self, device: &Device, pipeline_info: &mut PipelineInfo) -> () {
-        debug!("Destroying render passes...");
+    fn destroy_base_render_pass(&self, device: &Device, pipeline_info: &mut PipelineInfo) -> () {
+        debug!("Destroying base render pass...");
 
         unsafe {
             device.destroy_render_pass(pipeline_info.base_render_pass, None);
         }
         pipeline_info.base_render_pass = vk::RenderPass::null();
+    }
+    fn destroy_postprocessing_render_pass(&self, device: &Device, pipeline_info: &mut PipelineInfo) -> () {
+        debug!("Destroying postprocessing render pass...");
 
         unsafe {
             device.destroy_render_pass(pipeline_info.postprocessing_render_pass, None);
@@ -336,15 +348,27 @@ impl BootstrapPipelineLoader {
 
         Ok(())
     }
-    fn create_postprocessing_pipeline(&self, device: &Device, pipeline_info: &mut PipelineInfo, extent: vk::Extent2D, descriptor_set_layout: vk::DescriptorSetLayout, render_pass: vk::RenderPass) -> Result<()> {
+    fn create_base_render_pipeline_layouts(&self, device: &Device, pipeline_info: &mut PipelineInfo, app_data: &AppData) -> Result<()> {
+        let uniforms_info = app_data.uniforms.as_ref().unwrap();
+
+        self.create_depth_motion_pipeline_layout(device, pipeline_info, uniforms_info.base_descriptor_set_layout)?;
+        self.create_base_render_pipeline_layout(device, pipeline_info, uniforms_info.base_descriptor_set_layout)?;
+
+        Ok(())
+    }
+
+    fn create_postprocessing_pipeline_and_layout(&self, device: &Device, pipeline_info: &mut PipelineInfo, app_data: &AppData) -> Result<()> {
         debug!("Creating postprocessing pipeline layout and pipeline...");
 
         let vert_source = ShaderSource::SourcePath("shaders/motion_blur/shader.vert.spv".to_owned(), "main");
         let frag_source = ShaderSource::SourcePath("shaders/motion_blur/shader.frag.spv".to_owned(), "main");
 
-        let set_layouts = &[descriptor_set_layout][..];
+        let uniforms_info = app_data.uniforms.as_ref().unwrap();
+        let set_layouts = &[uniforms_info.postprocessing_descriptor_set_layout][..];
 
         let push_constant_ranges = &[][..] as &[vk::PushConstantRange];
+
+        let extent = app_data.swapchain.as_ref().unwrap().extent;
 
         let pipeline_layout = create_pipeline_layout(device, set_layouts, push_constant_ranges)?;
 
@@ -353,7 +377,7 @@ impl BootstrapPipelineLoader {
         ][..];
         let binding_descriptions = &[motion_blur::Vertex::binding_descriptions()].concat()[..];
         let attribute_descriptions = &[motion_blur::Vertex::attribute_descriptions()].concat()[..];
-        let pipeline = create_pipeline(vert_source, frag_source, device, extent, pipeline_layout, render_pass, 0, blend_state, DepthBufferUsageMode::DontUse, binding_descriptions, attribute_descriptions)?;
+        let pipeline = create_pipeline(vert_source, frag_source, device, Some(extent), pipeline_layout, pipeline_info.postprocessing_render_pass, 0, blend_state, DepthBufferUsageMode::DontUse, binding_descriptions, attribute_descriptions)?;
 
         debug!("Postprocessing pipeline layout ({:?}) and pipeline ({:?}) created.", pipeline_layout, pipeline);
 
@@ -363,19 +387,8 @@ impl BootstrapPipelineLoader {
         Ok(())
     }
 
-    fn create_pipelines(&self, device: &Device, pipeline_info: &mut PipelineInfo, app_data: &AppData) -> Result<()> {
-        let extent = app_data.swapchain.as_ref().unwrap().extent;
-        let uniforms_info = app_data.uniforms.as_ref().unwrap();
-
-        self.create_depth_motion_pipeline_layout(device, pipeline_info, uniforms_info.base_descriptor_set_layout)?;
-        self.create_base_render_pipeline_layout(device, pipeline_info, uniforms_info.base_descriptor_set_layout)?;
-        self.create_postprocessing_pipeline(device, pipeline_info, extent, uniforms_info.postprocessing_descriptor_set_layout, pipeline_info.postprocessing_render_pass)?;
-
-        Ok(())
-    }
-
-    fn destroy_pipelines(&self, device: &Device, pipeline_info: &mut PipelineInfo) -> () {
-        debug!("Destroying pipelines and pipeline layouts...");
+    fn destroy_postprocessing_pipeline_and_layout(&self, device: &Device, pipeline_info: &mut PipelineInfo) -> () {
+        debug!("Destroying postprocessing pipeline and pipeline layout...");
 
         unsafe {
             device.destroy_pipeline(pipeline_info.postprocessing_pipeline, None);
@@ -386,6 +399,9 @@ impl BootstrapPipelineLoader {
             device.destroy_pipeline_layout(pipeline_info.postprocessing_layout, None);
         }
         pipeline_info.postprocessing_layout = vk::PipelineLayout::null();
+    }
+    fn destroy_base_render_pipeline_layouts(&self, device: &Device, pipeline_info: &mut PipelineInfo) -> () {
+        debug!("Destroying base render pipeline layouts...");
 
         unsafe {
             device.destroy_pipeline_layout(pipeline_info.base_render_layout, None);
@@ -402,8 +418,10 @@ impl BootstrapPipelineLoader {
 impl BootstrapLoader for BootstrapPipelineLoader {
     fn after_create_logical_device(&self, _inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
         let mut pipeline_info = PipelineInfo::default();
-        self.create_render_passes(device, &mut pipeline_info, app_data)?;
-        self.create_pipelines(device, &mut pipeline_info, app_data)?;
+        self.create_base_render_pass(device, &mut pipeline_info, app_data)?;
+        self.create_base_render_pipeline_layouts(device, &mut pipeline_info, app_data)?;
+        self.create_postprocessing_render_pass(device, &mut pipeline_info, app_data)?;
+        self.create_postprocessing_pipeline_and_layout(device, &mut pipeline_info, app_data)?;
         app_data.pipeline = Some(pipeline_info);
 
         Ok(())
@@ -411,8 +429,26 @@ impl BootstrapLoader for BootstrapPipelineLoader {
 
     fn before_destroy_logical_device(&self, _inst: &Instance, device: &Device, app_data: &mut AppData) -> () {
         if let Some(mut pipeline_info) = app_data.pipeline.take() {
-            self.destroy_pipelines(device, &mut pipeline_info);
-            self.destroy_render_passes(device, &mut pipeline_info);
+            self.destroy_postprocessing_pipeline_and_layout(device, &mut pipeline_info);
+            self.destroy_postprocessing_render_pass(device, &mut pipeline_info);
+            self.destroy_base_render_pipeline_layouts(device, &mut pipeline_info);
+            self.destroy_base_render_pass(device, &mut pipeline_info);
         }
+    }
+
+    fn recreate_swapchain(&self, inst: &Instance, device: &Device, window: &Window, app_data: &mut AppData, next: &dyn Fn(&Instance, &Device, &Window, &mut AppData) -> Result<()>) -> Result<()> {
+        trace!("Recreating postprocessing render pass (but not base render pass, pipelines, or pipeline layouts) in recreate_swapchain");
+
+        let mut pipeline_info = app_data.pipeline.take().unwrap();
+
+        self.destroy_postprocessing_pipeline_and_layout(device, &mut pipeline_info);
+        self.destroy_postprocessing_render_pass(device, &mut pipeline_info);
+        next(inst, device, window, app_data)?;
+        self.create_postprocessing_render_pass(device, &mut pipeline_info, app_data)?;
+        self.create_postprocessing_pipeline_and_layout(device, &mut pipeline_info, app_data)?;
+
+        app_data.pipeline = Some(pipeline_info);
+
+        Ok(())
     }
 }

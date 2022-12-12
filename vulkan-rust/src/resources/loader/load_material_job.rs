@@ -53,8 +53,6 @@ impl LoadMaterialJob {
 
 impl ResourceLoadJob for LoadMaterialJob {
     fn load(&mut self, resource_loader: &mut ResourceLoader, device: &Device, app_data: &AppData) -> Result<()> {
-        let extent = app_data.swapchain.as_ref().unwrap().extent;
-
         let pipeline_info = app_data.pipeline.as_ref().unwrap();
         let layout = pipeline_info.base_render_layout;
         let render_pass = pipeline_info.base_render_pass;
@@ -67,7 +65,7 @@ impl ResourceLoadJob for LoadMaterialJob {
                     ..Default::default()
                 }
             ][..];
-            depth_and_motion_pipeline = Some(create_pipeline(depth_and_motion_sources.vertex, depth_and_motion_sources.fragment, device, extent, layout, render_pass, 0, blend_state, DepthBufferUsageMode::WriteIfLess, &self.binding_descriptions[..], &self.attribute_descriptions[..])?);
+            depth_and_motion_pipeline = Some(create_pipeline(depth_and_motion_sources.vertex, depth_and_motion_sources.fragment, device, None, layout, render_pass, 0, blend_state, DepthBufferUsageMode::WriteIfLess, &self.binding_descriptions[..], &self.attribute_descriptions[..])?);
         }
 
         let mut base_render_pipeline = None;
@@ -75,7 +73,7 @@ impl ResourceLoadJob for LoadMaterialJob {
             let blend_state = &[
                 BlendStateDescriptor::default()
             ][..];
-            base_render_pipeline = Some(create_pipeline(base_render_sources.vertex, base_render_sources.fragment, device, extent, layout, render_pass, 1, blend_state, DepthBufferUsageMode::WriteIfEqual, &self.binding_descriptions[..], &self.attribute_descriptions[..])?);
+            base_render_pipeline = Some(create_pipeline(base_render_sources.vertex, base_render_sources.fragment, device, None, layout, render_pass, 1, blend_state, DepthBufferUsageMode::WriteIfEqual, &self.binding_descriptions[..], &self.attribute_descriptions[..])?);
         }
 
         let material = Material {

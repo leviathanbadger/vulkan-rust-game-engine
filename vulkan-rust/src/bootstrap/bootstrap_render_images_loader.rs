@@ -15,14 +15,17 @@ use crate::{
 #[derive(Debug, Default)]
 pub struct RenderImagesInfo {
     pub base_render_extent: vk::Extent2D,
-    pub depth_stencil_buffers: Vec<Image2D>,
-    pub base_render_images: Vec<Image2D>,
 
-    pub motion_vector_format: vk::Format,
+    pub base_render_images: Vec<Image2D>,
+    pub depth_stencil_buffers: Vec<Image2D>,
     pub motion_vector_buffers: Vec<Image2D>
 }
 
 impl RenderImagesInfo {
+    pub fn base_render_format(&self) -> vk::Format {
+        self.base_render_images[0].format().unwrap()
+    }
+
     pub fn depth_stencil_format(&self) -> vk::Format {
         self.depth_stencil_buffers[0].format().unwrap()
     }
