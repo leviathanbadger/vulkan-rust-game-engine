@@ -26,7 +26,7 @@ use vulkanalia::{
 use crate::{
     app_data::{AppData, VulkanQueueInfo},
     bootstrap::{BootstrapLoader, QueueFamilyIndices},
-    shader_input::uniform_buffer_object::{UniformBufferObject},
+    shader_input::uniform_buffer_object::{UniformBufferObject, PostprocessingUniformBufferObject},
     game::scene::{Scene},
     frame_info::{FrameInfo},
     resources::{SingleFrameRenderInfo, ResourceLoader, SingleModelRenderInfo, Material}
@@ -602,6 +602,17 @@ impl App {
         };
         buffer.set_data(&self.device, &ubo)?;
 
+        let postprocessing_buffer = &mut self.app_data.uniforms.as_mut().unwrap().postprocessing_uniform_buffers[image_index];
+
+        let postprocessing_ubo = PostprocessingUniformBufferObject {
+            frame_index: frame_info.frame_index,
+            time_in_seconds: frame_info.time_in_seconds,
+            exposure: 0.12,
+
+            ..Default::default()
+        };
+        postprocessing_buffer.set_data(&self.device, &postprocessing_ubo)?;
+
         Ok(())
     }
 
@@ -816,10 +827,10 @@ impl App {
     }
 }
 
-//TODO: add asynchronous loading of assets; move asset loading onto other threads (placeholder models/textures if things don't load fast enough)
 //TODO: decouple render target format from swapchain format
 //TODO: learn to use (and actually use) HDR color space
 //TODO: render at a lower resolution than the swapchain-created images
+//TODO: add asynchronous loading of assets; move asset loading onto other threads (placeholder models/textures if things don't load fast enough)
 
 //TODO: only create one sampler resource, not one per image
 //TODO: use bindless rendering to support multiple textures

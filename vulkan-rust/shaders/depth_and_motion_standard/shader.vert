@@ -3,6 +3,11 @@
 layout(binding = 0) uniform UniformBufferObject {
     mat4 proj;
     mat4 previous_proj;
+    vec3 ambient_light;
+    vec3 directional_light_direction;
+    vec3 directional_light_color;
+    uint frame_index;
+    float time_in_seconds;
 } ubo;
 
 layout(push_constant) uniform PushConstants {

@@ -13,7 +13,7 @@ use crate::{
     app_data::{AppData},
     shader_input::{
         {motion_blur},
-        uniform_buffer_object::{UniformBufferObject}
+        uniform_buffer_object::{UniformBufferObject, PostprocessingUniformBufferObject}
     },
     resources::{Image2D, Buffer},
     bootstrap_loader
@@ -120,23 +120,37 @@ impl BootstrapDescriptorSetLoader {
 
         Ok(desc_sets)
     }
-    fn create_postprocessing_descriptor_sets(&self, device: &Device, count: u32, layout: vk::DescriptorSetLayout, desc_pool: vk::DescriptorPool, base_render_images: &Vec<Image2D>, motion_vector_images: &Vec<Image2D>) -> Result<Vec<vk::DescriptorSet>> {
+    fn create_postprocessing_descriptor_sets(&self, device: &Device, count: u32, layout: vk::DescriptorSetLayout, desc_pool: vk::DescriptorPool, uniform_buffers: &Vec<Buffer<PostprocessingUniformBufferObject>>, base_render_images: &Vec<Image2D>, motion_vector_images: &Vec<Image2D>) -> Result<Vec<vk::DescriptorSet>> {
         let desc_sets = self.allocate_descriptor_sets(device, count, layout, desc_pool)?;
 
         for (q, desc_set) in desc_sets.iter().enumerate() {
+            let buffer = unsafe { uniform_buffers[q].raw_buffer().unwrap() };
+            let buff_info = vk::DescriptorBufferInfo::builder()
+                .buffer(buffer)
+                .offset(0)
+                .range(size_of::<PostprocessingUniformBufferObject>() as u64);
+
+            let buffer_info = &[buff_info];
+            let ubo_write = vk::WriteDescriptorSet::builder()
+                .dst_set(*desc_set)
+                .dst_binding(0)
+                .dst_array_element(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(buffer_info);
+
             let image_info = &[
                 base_render_images[q].get_descriptor_image_info(),
                 motion_vector_images[q].get_descriptor_image_info()
             ];
             let sampler_write = vk::WriteDescriptorSet::builder()
                 .dst_set(*desc_set)
-                .dst_binding(0)
+                .dst_binding(1)
                 .dst_array_element(0)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .image_info(image_info);
 
             unsafe {
-                device.update_descriptor_sets(&[sampler_write], &[] as &[vk::CopyDescriptorSet]);
+                device.update_descriptor_sets(&[ubo_write, sampler_write], &[] as &[vk::CopyDescriptorSet]);
             }
         }
 
@@ -149,7 +163,7 @@ impl BootstrapDescriptorSetLoader {
 
         debug!("Allocating descriptor sets...");
         descriptor_sets_info.base_descriptor_sets = self.create_base_descriptor_sets(device, image_count, uniforms_info.base_descriptor_set_layout, uniforms_info.base_descriptor_pool, &uniforms_info.uniform_buffers, descriptor_sets_info)?;
-        descriptor_sets_info.postprocessing_descriptor_sets = self.create_postprocessing_descriptor_sets(device, image_count, uniforms_info.postprocessing_descriptor_set_layout, uniforms_info.postprocessing_descriptor_pool, &render_images_info.base_render_images, &render_images_info.motion_vector_buffers)?;
+        descriptor_sets_info.postprocessing_descriptor_sets = self.create_postprocessing_descriptor_sets(device, image_count, uniforms_info.postprocessing_descriptor_set_layout, uniforms_info.postprocessing_descriptor_pool, &uniforms_info.postprocessing_uniform_buffers, &render_images_info.base_render_images, &render_images_info.motion_vector_buffers)?;
         debug!("Descriptor sets allocated: {:?}", descriptor_sets_info.base_descriptor_sets);
 
         Ok(())

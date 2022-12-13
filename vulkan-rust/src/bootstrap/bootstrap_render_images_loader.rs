@@ -68,17 +68,16 @@ impl BootstrapRenderImagesLoader {
         render_images_info.depth_stencil_buffers.clear();
     }
 
-    fn create_render_images(&self, device: &Device, render_images_info: &mut RenderImagesInfo, app_data: &AppData) -> Result<()> {
+    fn create_render_images(&self, inst: &Instance, device: &Device, render_images_info: &mut RenderImagesInfo, app_data: &AppData) -> Result<()> {
         debug!("Creating render images...");
 
         let swapchain_info = app_data.swapchain.as_ref().unwrap();
         let image_count = swapchain_info.image_count;
-        let swapchain_format = swapchain_info.surface_format.format;
         let swapchain_extent = swapchain_info.extent;
 
         let command_pool_info = &app_data.command_pools.as_ref().unwrap();
 
-        let base_render_images = Image2D::new_and_create_render_images(image_count, device, &app_data.memory_properties, swapchain_format, &swapchain_extent, true, command_pool_info)?;
+        let base_render_images = Image2D::new_and_create_render_images(image_count, inst, device, app_data.physical_device.as_ref().unwrap(), &app_data.memory_properties, &swapchain_extent, true, command_pool_info)?;
 
         debug!("Render images created: {:?}", base_render_images);
         render_images_info.base_render_images = base_render_images;
@@ -126,7 +125,7 @@ impl BootstrapLoader for BootstrapRenderImagesLoader {
     fn after_create_logical_device(&self, inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
         let mut render_images_info = RenderImagesInfo::default();
         self.create_depth_objects(inst, device, &mut render_images_info, app_data)?;
-        self.create_render_images(device, &mut render_images_info, app_data)?;
+        self.create_render_images(inst, device, &mut render_images_info, app_data)?;
         self.create_motion_vector_buffers(inst, device, &mut render_images_info, app_data)?;
         app_data.render_images = Some(render_images_info);
 

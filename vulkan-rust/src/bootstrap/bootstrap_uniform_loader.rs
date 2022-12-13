@@ -8,9 +8,7 @@ use vulkanalia::{
 
 use crate::{
     app_data::{AppData},
-    shader_input::{
-        uniform_buffer_object::UniformBufferObject
-    },
+    shader_input::uniform_buffer_object::{UniformBufferObject, PostprocessingUniformBufferObject},
     resources::{Buffer},
     bootstrap_loader
 };
@@ -19,7 +17,10 @@ use crate::{
 pub struct UniformsInfo {
     pub base_descriptor_set_layout: vk::DescriptorSetLayout,
     pub postprocessing_descriptor_set_layout: vk::DescriptorSetLayout,
+
     pub uniform_buffers: Vec<Buffer::<UniformBufferObject>>,
+    pub postprocessing_uniform_buffers: Vec<Buffer::<PostprocessingUniformBufferObject>>,
+
     pub base_descriptor_pool: vk::DescriptorPool,
     pub postprocessing_descriptor_pool: vk::DescriptorPool
 }
@@ -53,19 +54,25 @@ impl BootstrapUniformLoader {
         }
     }
     fn create_postprocessing_descriptor_set_layout(&self, device: &Device) -> Result<vk::DescriptorSetLayout> {
-        let sampler_binding = vk::DescriptorSetLayoutBinding::builder()
+        let ubo_binding = vk::DescriptorSetLayoutBinding::builder()
             .binding(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS);
 
-        let motion_vector_sampler_binding = vk::DescriptorSetLayoutBinding::builder()
+        let sampler_binding = vk::DescriptorSetLayoutBinding::builder()
             .binding(1)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS);
 
-        let bindings = &[sampler_binding, motion_vector_sampler_binding];
+        let motion_vector_sampler_binding = vk::DescriptorSetLayoutBinding::builder()
+            .binding(2)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::ALL_GRAPHICS);
+
+        let bindings = &[ubo_binding, sampler_binding, motion_vector_sampler_binding];
         let dsl_info = vk::DescriptorSetLayoutCreateInfo::builder()
             .bindings(bindings);
 
@@ -99,6 +106,7 @@ impl BootstrapUniformLoader {
     fn create_uniform_buffers(&self, device: &Device, uniforms_info: &mut UniformsInfo, app_data: &AppData) -> Result<()> {
         debug!("Creating uniform buffers...");
         let image_count = app_data.swapchain.as_ref().unwrap().image_count;
+
         let mut uniform_buffers = (0..image_count)
             .map(|_| {
                 Buffer::<UniformBufferObject>::new(vk::BufferUsageFlags::UNIFORM_BUFFER, 1, false)
@@ -109,14 +117,30 @@ impl BootstrapUniformLoader {
             buffer.create(device, &app_data.memory_properties)?;
         }
 
-        debug!("Uniform buffers created: {:?}", uniform_buffers);
+        let mut postprocessing_uniform_buffers = (0..image_count)
+            .map(|_| {
+                Buffer::<PostprocessingUniformBufferObject>::new(vk::BufferUsageFlags::UNIFORM_BUFFER, 1, false)
+            })
+            .collect::<Vec<_>>();
+
+        for buffer in postprocessing_uniform_buffers.iter_mut() {
+            buffer.create(device, &app_data.memory_properties)?;
+        }
+
+        debug!("Uniform buffers created: {:?}; {:?}", uniform_buffers, postprocessing_uniform_buffers);
         uniforms_info.uniform_buffers = uniform_buffers;
+        uniforms_info.postprocessing_uniform_buffers = postprocessing_uniform_buffers;
 
         Ok(())
     }
 
     fn destroy_uniform_buffers(&self, device: &Device, uniforms_info: &mut UniformsInfo) -> () {
         debug!("Destroying uniform buffers...");
+
+        for uniform_buffer in uniforms_info.postprocessing_uniform_buffers.iter_mut() {
+            uniform_buffer.destroy(device);
+        }
+        uniforms_info.postprocessing_uniform_buffers.clear();
 
         for uniform_buffer in uniforms_info.uniform_buffers.iter_mut() {
             uniform_buffer.destroy(device);
@@ -133,7 +157,7 @@ impl BootstrapUniformLoader {
             .type_(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .descriptor_count(image_count);
 
-        let pool_sizes = &[ubo_size, sampler_size];
+        let pool_sizes = &[ubo_size, sampler_size, sampler_size, sampler_size];
         let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
             .pool_sizes(pool_sizes)
             .max_sets(image_count);
@@ -143,6 +167,10 @@ impl BootstrapUniformLoader {
         }
     }
     fn create_postprocessing_descriptor_pool(&self, device: &Device, image_count: u32) -> Result<vk::DescriptorPool> {
+        let ubo_size = vk::DescriptorPoolSize::builder()
+            .type_(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(image_count);
+
         let sampler_size = vk::DescriptorPoolSize::builder()
             .type_(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .descriptor_count(image_count);
@@ -151,7 +179,7 @@ impl BootstrapUniformLoader {
             .type_(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .descriptor_count(image_count);
 
-        let pool_sizes = &[sampler_size, motion_vector_sampler_size];
+        let pool_sizes = &[ubo_size, sampler_size, motion_vector_sampler_size];
         let desc_pool_info = vk::DescriptorPoolCreateInfo::builder()
             .pool_sizes(pool_sizes)
             .max_sets(image_count);

@@ -73,6 +73,13 @@ impl Image2D {
         Err(anyhow!("Failed to find a supported format"))
     }
 
+    unsafe fn choose_render_image_format(inst: &Instance, physical_device: &vk::PhysicalDevice) -> Result<vk::Format> {
+        let candidates = &[
+            vk::Format::R16G16B16A16_SFLOAT
+        ];
+
+        Self::get_supported_format(inst, physical_device, candidates, vk::ImageTiling::OPTIMAL, vk::FormatFeatureFlags::COLOR_ATTACHMENT)
+    }
     unsafe fn choose_depth_stencil_format(inst: &Instance, physical_device: &vk::PhysicalDevice) -> Result<vk::Format> {
         let candidates = &[
             vk::Format::D32_SFLOAT_S8_UINT,
@@ -347,7 +354,9 @@ impl Image2D {
 
         Ok(depth_stencil_buffers)
     }
-    pub fn new_and_create_render_images(image_count: u32, device: &Device, memory_properties: &PhysicalDeviceMemoryProperties, format: vk::Format, extent: &vk::Extent2D, sampled: bool, command_pool_info: &CommandPoolsInfo) -> Result<Vec<Self>> {
+    pub fn new_and_create_render_images(image_count: u32, inst: &Instance, device: &Device, physical_device: &vk::PhysicalDevice, memory_properties: &PhysicalDeviceMemoryProperties, extent: &vk::Extent2D, sampled: bool, command_pool_info: &CommandPoolsInfo) -> Result<Vec<Self>> {
+        let format = unsafe { Self::choose_render_image_format(inst, physical_device)? };
+
         let render_images = (0..image_count)
             .map(|_| -> Result<Self> {
                 let mut image = Image2D::new();

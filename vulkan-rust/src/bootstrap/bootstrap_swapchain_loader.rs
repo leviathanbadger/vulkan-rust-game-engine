@@ -51,13 +51,21 @@ bootstrap_loader! {
     }
 }
 
-impl BootstrapSwapchainLoader {
-    fn choose_surface_format(&self, swapchain_support: &SwapchainSupport) -> Option<vk::SurfaceFormatKHR> {
-        let available_formats = &swapchain_support.formats[..];
+const SURFACE_FORMAT_PREFERENCES: [(vk::Format, vk::ColorSpaceKHR); 2] = [
+    (vk::Format::A2B10G10R10_UNORM_PACK32, vk::ColorSpaceKHR::HDR10_ST2084_EXT),
+    (vk::Format::B8G8R8A8_SRGB, vk::ColorSpaceKHR::SRGB_NONLINEAR)
+];
 
-        for format in available_formats {
-            if format.format == vk::Format::B8G8R8A8_SRGB && format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR {
-                return Some(*format);
+impl BootstrapSwapchainLoader {
+    fn choose_surface_format(&self, swapchain_support: &SwapchainSupport, preferences: &[(vk::Format, vk::ColorSpaceKHR)]) -> Option<vk::SurfaceFormatKHR> {
+        let available_formats = &swapchain_support.formats[..];
+        trace!("Available surface formats: {:?}", available_formats);
+
+        for preference in preferences {
+            for format in available_formats {
+                if format.format == preference.0 && format.color_space == preference.1 {
+                    return Some(*format);
+                }
             }
         }
 
@@ -114,7 +122,7 @@ impl BootstrapSwapchainLoader {
             swapchain_support = SwapchainSupport::get(inst, app_data, physical_device)?;
         }
 
-        let format = self.choose_surface_format(&swapchain_support).unwrap();
+        let format = self.choose_surface_format(&swapchain_support, &SURFACE_FORMAT_PREFERENCES[..]).unwrap();
         let mode = self.choose_presentation_mode(&swapchain_support).unwrap();
         let extent = self.choose_swapchain_extent(&swapchain_support, window);
 
@@ -215,7 +223,7 @@ impl BootstrapLoader for BootstrapSwapchainLoader {
             swapchain_support = SwapchainSupport::get(inst, app_data, physical_device)?;
         }
 
-        let format = self.choose_surface_format(&swapchain_support);
+        let format = self.choose_surface_format(&swapchain_support, &SURFACE_FORMAT_PREFERENCES[..]);
         if let None = format {
             return Err(anyhow!(GraphicsCardSuitabilityError("Physical device does not support sufficient swapchain formats.")))
         }

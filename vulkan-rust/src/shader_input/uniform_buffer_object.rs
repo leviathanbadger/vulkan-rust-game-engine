@@ -20,3 +20,11 @@ pub struct UniformBufferObject {
     pub frame_index: u32,
     pub time_in_seconds: f32
 }
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default)]
+pub struct PostprocessingUniformBufferObject {
+    pub frame_index: u32,
+    pub time_in_seconds: f32,
+    pub exposure: f32
+}

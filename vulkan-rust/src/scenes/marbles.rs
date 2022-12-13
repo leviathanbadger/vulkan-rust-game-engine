@@ -17,10 +17,10 @@ pub fn create_scene(scene: &mut Box<Scene>) -> Result<()> {
     // scene.render_camera.transform.pos = glm::vec3(1.0, 1.0, 0.75);
     // scene.render_camera.look_at(*crate::game::transform::ORIGIN);
     scene.render_camera.look_at(glm::vec3(0.0, 0.0, -0.9));
-    scene.ambient_light = glm::vec3(0.1, 0.1, 0.1);
+    scene.ambient_light = glm::vec3(4.0, 4.0, 4.0);
     scene.directional_light = Some(DirectionalLight {
         direction: glm::vec3(-1.0, 0.0, -0.3),
-        color: glm::vec3(1.0, 1.0, 1.0),
+        color: glm::vec3(10.0, 10.0, 10.0),
     });
 
     let mut game_object = Box::new(GameObject::new());
