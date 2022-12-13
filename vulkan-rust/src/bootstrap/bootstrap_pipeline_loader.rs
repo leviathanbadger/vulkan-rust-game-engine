@@ -360,8 +360,17 @@ impl BootstrapPipelineLoader {
     fn create_postprocessing_pipeline_and_layout(&self, device: &Device, pipeline_info: &mut PipelineInfo, app_data: &AppData) -> Result<()> {
         debug!("Creating postprocessing pipeline layout and pipeline...");
 
-        let vert_source = ShaderSource::SourcePath("shaders/motion_blur/shader.vert.spv".to_owned(), "main");
-        let frag_source = ShaderSource::SourcePath("shaders/motion_blur/shader.frag.spv".to_owned(), "main");
+        let swapchain_info = app_data.swapchain.as_ref().unwrap();
+        let use_hdr = swapchain_info.use_hdr;
+
+        let vert_source: ShaderSource;
+        let frag_source: ShaderSource;
+
+        let vert_bytes = include_bytes!("../../shaders/motion_blur/shader.vert.spv").to_vec();
+        vert_source = ShaderSource::Source(vert_bytes.into_boxed_slice(), "main");
+
+        let frag_bytes = if use_hdr { include_bytes!("../../shaders/motion_blur/shader-hdr.frag.spv").to_vec() } else { include_bytes!("../../shaders/motion_blur/shader.frag.spv").to_vec() };
+        frag_source = ShaderSource::Source(frag_bytes.into_boxed_slice(), "main");
 
         let uniforms_info = app_data.uniforms.as_ref().unwrap();
         let set_layouts = &[uniforms_info.postprocessing_descriptor_set_layout][..];

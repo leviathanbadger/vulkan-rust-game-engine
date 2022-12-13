@@ -21,7 +21,8 @@ pub struct SwapchainInfo {
     pub extent: vk::Extent2D,
     pub image_count: u32,
     pub swapchain: vk::SwapchainKHR,
-    pub images: Vec<Image2D>
+    pub images: Vec<Image2D>,
+    pub use_hdr: bool
 }
 
 #[derive(Debug)]
@@ -181,6 +182,7 @@ impl BootstrapSwapchainLoader {
         swapchain_info.image_count = image_count;
         swapchain_info.swapchain = swapchain;
         swapchain_info.images = images;
+        swapchain_info.use_hdr = format.color_space == vk::ColorSpaceKHR::HDR10_ST2084_EXT;
         app_data.swapchain = Some(swapchain_info);
 
         Ok(())

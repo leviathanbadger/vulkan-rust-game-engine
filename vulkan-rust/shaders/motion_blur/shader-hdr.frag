@@ -23,17 +23,6 @@ vec3 aces_approx(vec3 v) {
     return clamp((v*(a*v+b))/(v*(c*v+d)+e), 0.0f, 1.0f);
 }
 
-float luminance(vec3 v)
-{
-    return dot(v, vec3(0.2126f, 0.7152f, 0.0722f));
-}
-
-vec3 change_luminance(vec3 c_in, float l_out)
-{
-    float l_in = luminance(c_in);
-    return c_in * (l_out / l_in);
-}
-
 void main() {
     vec2 motion = texture(texMotion, fragUv).rg * -0.5;
 
@@ -51,10 +40,7 @@ void main() {
     //No motion blur
     //vec3 samples = texture(texColor, fragUv).rgb;
 
-    // samples = vec3(1.0) - exp(-samples * ubo.exposure);
-    float new_luminance = luminance(vec3(1.0) - exp(-samples * ubo.exposure));
-    samples = change_luminance(samples, new_luminance);
-    // samples = pow(samples, vec3(1.0 / 2.2));
-    // samples = aces_approx(samples);
+    samples = vec3(1.0) - exp(-samples * ubo.exposure);
+    samples = aces_approx(samples);
     outColor = vec4(clamp(samples, 0.0, 1.0), 1.0);
 }
