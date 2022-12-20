@@ -52,7 +52,7 @@ bootstrap_loader! {
     }
 }
 
-const SURFACE_FORMAT_PREFERENCES: [(vk::Format, vk::ColorSpaceKHR); 2] = [
+const SURFACE_FORMAT_PREFERENCES: &[(vk::Format, vk::ColorSpaceKHR)] = &[
     (vk::Format::A2B10G10R10_UNORM_PACK32, vk::ColorSpaceKHR::HDR10_ST2084_EXT),
     (vk::Format::B8G8R8A8_SRGB, vk::ColorSpaceKHR::SRGB_NONLINEAR)
 ];
