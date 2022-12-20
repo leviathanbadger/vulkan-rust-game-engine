@@ -30,7 +30,7 @@ void main() {
     //No motion blur
     //vec3 samples = texture(texColor, fragUv).rgb;
 
-    samples /= 10.0; //TODO: no magic numbers like this
+    samples /= 8.0; //TODO: no magic numbers like this
     samples = vec3(1.0) - exp(-samples * ubo.exposure);
     outColor = vec4(clamp(samples, 0.0, 1.0), 1.0);
 }
