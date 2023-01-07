@@ -82,21 +82,16 @@ impl BootstrapSwapchainLoader {
         let available_presentation_modes = &swapchain_support.present_modes[..];
 
         let mut has_mailbox = false;
-        let mut has_fifo = false;
         for mode in available_presentation_modes {
             if *mode == vk::PresentModeKHR::MAILBOX {
                 has_mailbox = true;
-            } else if *mode == vk::PresentModeKHR::FIFO {
-                has_fifo = true;
             }
         }
 
         if has_mailbox {
             Some(vk::PresentModeKHR::MAILBOX)
-        } else if has_fifo {
-            Some(vk::PresentModeKHR::FIFO)
         } else {
-            None
+            Some(vk::PresentModeKHR::FIFO)
         }
     }
 

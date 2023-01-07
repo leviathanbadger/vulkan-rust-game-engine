@@ -1,12 +1,11 @@
 use std::{
     collections::{HashSet},
     ffi::{CStr},
-    time::{Instant, Duration},
+    time::{Instant},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering}
-    },
-    thread
+    }
 };
 use anyhow::{anyhow, Result};
 use thiserror::Error;
@@ -488,9 +487,6 @@ impl App {
         if self.needs_new_swapchain {
             self.recreate_swapchain()?;
         }
-
-        //TODO: sleep until next frame, not just some arbitrary amount
-        thread::sleep(Duration::from_millis(10));
 
         Ok(())
     }
