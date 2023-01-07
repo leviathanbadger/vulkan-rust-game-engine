@@ -8,7 +8,7 @@ use crate::{
         game_object::{GameObject},
         components::{RotateOverTimeComponent, RenderMarbleComponent, RenderModelComponent}
     },
-    shader_input::{simple}
+    shader_input::{standard}
 };
 
 pub fn create_scene(scene: &mut Box<Scene>) -> Result<()> {
@@ -29,7 +29,8 @@ pub fn create_scene(scene: &mut Box<Scene>) -> Result<()> {
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/viking-room/viking-room.obj")?))?;
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/coords/coords.obj")?))?;
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/sphere/sphere.obj")?))?;
-    game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/marbles/bowl.obj")?))?;
+    // game_object.add_component(Box::new(RenderModelComponent::<standard::Vertex>::new("resources/models/marbles/flat_plane.obj")?))?;
+    game_object.add_component(Box::new(RenderModelComponent::<standard::Vertex>::new("resources/models/marbles/bowl.obj")?))?;
     game_object.add_component(Box::new(RenderMarbleComponent::new("resources/models/marbles/marble.obj")?))?;
     scene.add_game_object(game_object)?;
 

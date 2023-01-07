@@ -17,19 +17,22 @@ layout(push_constant) uniform PushConstants {
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
-layout(location = 2) in vec3 inColor;
-layout(location = 3) in vec2 inUv;
+layout(location = 2) in vec3 inTangent;
+layout(location = 3) in vec3 inColor;
+layout(location = 4) in vec2 inUv;
 
 layout(location = 0) out vec4 currentFragPositionCameraSpace;
 layout(location = 1) out vec3 fragNormal;
-layout(location = 2) out vec3 fragColor;
-layout(location = 3) out vec2 fragUv;
+layout(location = 2) out vec3 fragTangent;
+layout(location = 3) out vec3 fragColor;
+layout(location = 4) out vec2 fragUv;
 
 void main() {
     currentFragPositionCameraSpace = pcs.viewmodel * vec4(inPosition, 1.0);
     gl_Position = ubo.proj * currentFragPositionCameraSpace;
 
-    fragNormal = (pcs.normal_viewmodel * vec4(inNormal, 1.0)).rgb;
+    fragNormal = normalize((pcs.normal_viewmodel * vec4(inNormal, 1.0)).xyz);
+    fragTangent = normalize((pcs.normal_viewmodel * vec4(inTangent, 1.0)).xyz);
     fragColor = inColor;
     fragUv = inUv;
 }

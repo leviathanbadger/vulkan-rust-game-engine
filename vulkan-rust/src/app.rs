@@ -603,7 +603,8 @@ impl App {
         let postprocessing_ubo = PostprocessingUniformBufferObject {
             frame_index: frame_info.frame_index,
             time_in_seconds: frame_info.time_in_seconds,
-            exposure: 0.12,
+            exposure: 0.13,
+            // exposure: 1.0,
 
             ..Default::default()
         };

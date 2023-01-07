@@ -19,7 +19,7 @@ lazy_static! {
 }
 
 impl CanBeVertexBufferType for Vertex {
-    fn create_vertex_from_opts(pos: glm::Vec3, normal: Option<glm::Vec3>, _color: Option<glm::Vec3>, _uv: Option<glm::Vec2>, face_normal: Option<glm::Vec3>) -> Self {
+    fn create_vertex_from_opts(pos: glm::Vec3, normal: Option<glm::Vec3>, _color: Option<glm::Vec3>, _uv: Option<glm::Vec2>, face_normal: Option<glm::Vec3>, _face_tangent: Option<glm::Vec3>) -> Self {
         Vertex::new(pos, normal.unwrap_or_else(|| face_normal.unwrap_or(*NO_NORMAL)))
     }
 }

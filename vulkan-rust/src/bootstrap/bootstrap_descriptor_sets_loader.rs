@@ -38,7 +38,7 @@ bootstrap_loader! {
 }
 
 impl BootstrapDescriptorSetLoader {
-    fn load_image(&self, path: &'static str, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pools_info: &CommandPoolsInfo) -> Result<Image2D> {
+    fn load_image(&self, path: &'static str, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pools_info: &CommandPoolsInfo, is_srgb: bool) -> Result<Image2D> {
         let image_file = File::open(path).map_err(|_| anyhow!("Problem loading PNG file at \"{:?}\"", path))?;
 
         let mut decoder = png::Decoder::new(image_file);
@@ -46,7 +46,7 @@ impl BootstrapDescriptorSetLoader {
         let mut reader = decoder.read_info()?;
 
         let mut image = Image2D::new();
-        image.create_from_png(&mut reader, device, memory_properties, command_pools_info)?;
+        image.create_from_png(&mut reader, device, memory_properties, command_pools_info, is_srgb)?;
 
         Ok(image)
     }
@@ -55,14 +55,18 @@ impl BootstrapDescriptorSetLoader {
         let memory_properties = &app_data.memory_properties;
         let command_pools_info = app_data.command_pools.as_ref().unwrap();
 
-        // descriptor_sets_info.diffuse = self.load_image("resources/models/die/die_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info)?;
-        // descriptor_sets_info.occlusion_roughness_metallic = self.load_image("resources/models/die/die_DefaultMaterial_OcclusionRoughnessMetallic.png", device, memory_properties, command_pools_info)?;
-        // descriptor_sets_info.diffuse = self.load_image("resources/models/viking-room/viking-room.png", device, memory_properties, command_pools_info)?;
-        // descriptor_sets_info.diffuse = self.load_image("resources/models/sphere/sphere_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info)?;
+        // descriptor_sets_info.diffuse = self.load_image("resources/models/die/die_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info, true)?;
+        // descriptor_sets_info.occlusion_roughness_metallic = self.load_image("resources/models/die/die_DefaultMaterial_OcclusionRoughnessMetallic.png", device, memory_properties, command_pools_info, false)?;
+        // descriptor_sets_info.diffuse = self.load_image("resources/models/viking-room/viking-room.png", device, memory_properties, command_pools_info, true)?;
+        // descriptor_sets_info.diffuse = self.load_image("resources/models/sphere/sphere_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info, true)?;
 
-        descriptor_sets_info.diffuse = self.load_image("resources/models/marbles/bowl_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info)?;
-        descriptor_sets_info.normal = self.load_image("resources/models/marbles/bowl_DefaultMaterial_Normal.png", device, memory_properties, command_pools_info)?;
-        descriptor_sets_info.occlusion_roughness_metallic = self.load_image("resources/models/marbles/bowl_DefaultMaterial_OcclusionRoughnessMetallic.png", device, memory_properties, command_pools_info)?;
+        descriptor_sets_info.diffuse = self.load_image("resources/models/marbles/bowl_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info, true)?;
+        descriptor_sets_info.normal = self.load_image("resources/models/marbles/bowl_DefaultMaterial_Normal.png", device, memory_properties, command_pools_info, false)?;
+        descriptor_sets_info.occlusion_roughness_metallic = self.load_image("resources/models/marbles/bowl_DefaultMaterial_OcclusionRoughnessMetallic.png", device, memory_properties, command_pools_info, false)?;
+
+        // descriptor_sets_info.diffuse = self.load_image("resources/models/marbles/flat_plane_DefaultMaterial_BaseColor.png", device, memory_properties, command_pools_info, true)?;
+        // descriptor_sets_info.normal = self.load_image("resources/models/marbles/flat_plane_DefaultMaterial_Normal.png", device, memory_properties, command_pools_info, false)?;
+        // descriptor_sets_info.occlusion_roughness_metallic = self.load_image("resources/models/marbles/flat_plane_DefaultMaterial_OcclusionRoughnessMetallic.png", device, memory_properties, command_pools_info, false)?;
 
         Ok(())
     }

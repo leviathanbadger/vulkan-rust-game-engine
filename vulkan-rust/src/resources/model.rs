@@ -16,7 +16,7 @@ use vulkanalia::{
 use crate::shader_input::vertex_attribute_builder::{EmptyVertex, HasVertexAttributeBindings};
 
 pub trait CanBeVertexBufferType : HasVertexAttributeBindings + Copy + Clone + Default + Hash + PartialEq + Eq + ::std::fmt::Debug {
-    fn create_vertex_from_opts(pos: glm::Vec3, normal: Option<glm::Vec3>, color: Option<glm::Vec3>, uv: Option<glm::Vec2>, face_normal: Option<glm::Vec3>) -> Self;
+    fn create_vertex_from_opts(pos: glm::Vec3, normal: Option<glm::Vec3>, color: Option<glm::Vec3>, uv: Option<glm::Vec2>, face_normal: Option<glm::Vec3>, face_tangent: Option<glm::Vec3>) -> Self;
 }
 pub trait CanBeInstVertexBufferType : HasVertexAttributeBindings + Copy + Clone + Default + Hash + PartialEq + Eq + ::std::fmt::Debug {
 }
@@ -33,7 +33,7 @@ impl HasVertexAttributeBindings for u8 {
 }
 #[doc(hidden)]
 impl CanBeVertexBufferType for u8 {
-    fn create_vertex_from_opts(_pos: glm::Vec3, _normal: Option<glm::Vec3>, _color: Option<glm::Vec3>, _uv: Option<glm::Vec2>, _face_normal: Option<glm::Vec3>) -> Self {
+    fn create_vertex_from_opts(_pos: glm::Vec3, _normal: Option<glm::Vec3>, _color: Option<glm::Vec3>, _uv: Option<glm::Vec2>, _face_normal: Option<glm::Vec3>, _face_tangent: Option<glm::Vec3>) -> Self {
         panic!("Not actually supported.")
     }
 }
@@ -102,6 +102,7 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
 
             let mut next_face = 0usize;
             let mut face_normals = vec![];
+            let mut face_tangents = vec![];
             for _q in 0..(model.mesh.indices.len() / 3) {
                 let end = next_face + 3;
 
@@ -116,11 +117,38 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
                 let face_normal = glm::cross(&glm::normalize(&(pt1 - pt2)), &glm::normalize(&(pt3 - pt2)));
                 face_normals.push(Some(face_normal));
 
+                let pt1_uv_offset = (pt_indices[0] * 2) as usize;
+                let pt2_uv_offset = (pt_indices[1] * 2) as usize;
+                let pt3_uv_offset = (pt_indices[2] * 2) as usize;
+                if pt1_uv_offset + 2 > mesh.texcoords.len() || pt2_uv_offset + 2 > mesh.texcoords.len() || pt3_uv_offset + 2 > mesh.texcoords.len() {
+                    face_tangents.push(None);
+                } else {
+                    let pt1_uv = glm::vec2(mesh.texcoords[pt1_uv_offset], 1.0 - mesh.texcoords[pt1_uv_offset + 1]);
+                    let pt2_uv = glm::vec2(mesh.texcoords[pt2_uv_offset], 1.0 - mesh.texcoords[pt2_uv_offset + 1]);
+                    let pt3_uv = glm::vec2(mesh.texcoords[pt3_uv_offset], 1.0 - mesh.texcoords[pt3_uv_offset + 1]);
+
+                    let edge1 = pt2 - pt1;
+                    let edge2 = pt3 - pt1;
+                    let deltauv1 = pt2_uv - pt1_uv;
+                    let deltauv2 = pt3_uv - pt1_uv;
+                    let f = 1.0 / (deltauv1[0] * deltauv2[1] - deltauv2[0] * deltauv1[1]);
+
+                    let mut tangent = f * glm::vec3(
+                        deltauv2[1] * edge1[0] - deltauv1[1] * edge2[0],
+                        deltauv2[1] * edge1[1] - deltauv1[1] * edge2[1],
+                        deltauv2[1] * edge1[2] - deltauv1[1] * edge2[2]
+                    );
+                    tangent = tangent - (face_normal * glm::dot(&face_normal, &tangent));
+                    tangent = glm::normalize(&tangent);
+                    face_tangents.push(Some(tangent));
+                }
+
                 next_face = end;
             }
 
             for (q, mesh_index) in model.mesh.indices.iter().enumerate() {
                 let face_normal = *face_normals.get(q / 3).unwrap_or(&None);
+                let face_tangent = *face_tangents.get(q / 3).unwrap_or(&None);
 
                 let vertex: TVert;
                 {
@@ -150,7 +178,7 @@ impl<TVert> Model<TVert> where TVert : CanBeVertexBufferType {
                         Some(glm::vec2(mesh.texcoords[uv_offset], 1.0 - mesh.texcoords[uv_offset + 1]))
                     };
 
-                    vertex = TVert::create_vertex_from_opts(pos, normal, color, uv, face_normal);
+                    vertex = TVert::create_vertex_from_opts(pos, normal, color, uv, face_normal, face_tangent);
                 }
 
                 if let Some(model_index) = vertex_indices.get(&vertex) {

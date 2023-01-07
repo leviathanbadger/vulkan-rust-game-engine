@@ -425,13 +425,13 @@ impl Image2D {
         Ok(())
     }
 
-    pub fn create_from_png<R: Read>(&mut self, reader: &mut png::Reader<R>, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pool_info: &CommandPoolsInfo) -> Result<()> {
+    pub fn create_from_png<R: Read>(&mut self, reader: &mut png::Reader<R>, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pool_info: &CommandPoolsInfo, is_srgb: bool) -> Result<()> {
         let buff_size = reader.info().raw_bytes();
         let color_type = reader.info().color_type;
         let mut pixels = vec![0; buff_size];
         reader.next_frame(&mut pixels)?;
 
-        let format = vk::Format::R8G8B8A8_SRGB;
+        let format = if is_srgb { vk::Format::R8G8B8A8_SRGB } else { vk::Format::R8G8B8A8_UNORM };
         self.format = Some(format);
 
         let (width, height) = reader.info().size();

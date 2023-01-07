@@ -10,7 +10,7 @@ layout(binding = 0) uniform UniformBufferObject {
     float time_in_seconds;
 } ubo;
 
-layout(binding = 1) uniform sampler2D tex[2];
+layout(binding = 1) uniform sampler2D tex[3];
 
 layout(push_constant) uniform PushConstants {
     mat4 viewmodel;
@@ -19,8 +19,9 @@ layout(push_constant) uniform PushConstants {
 
 layout(location = 0) in vec4 currentFragPositionCameraSpace;
 layout(location = 1) in vec3 fragNormal;
-layout(location = 2) in vec3 fragColor;
-layout(location = 3) in vec2 fragUv;
+layout(location = 2) in vec3 fragTangent;
+layout(location = 3) in vec3 fragColor;
+layout(location = 4) in vec2 fragUv;
 
 layout(location = 0) out vec4 outColor;
 
@@ -28,6 +29,13 @@ void main() {
     vec3 light_color = ubo.ambient_light;
 
     vec3 normal = normalize(fragNormal);
+    vec3 tangent = normalize(fragTangent);
+    vec3 binormal = normalize(cross(normal, tangent));
+    mat3 TBN = mat3(tangent, normal, binormal);
+    vec3 normal_tex_sample = texture(tex[1], fragUv).xzy * 2.0 - 1.0;
+    normal_tex_sample.z = -normal_tex_sample.z;
+    normal = normalize(TBN * normal_tex_sample);
+
     float directional_amt = max(dot(normal, -ubo.directional_light_direction), 0.0);
     light_color += ubo.directional_light_color * directional_amt;
 
@@ -44,6 +52,10 @@ void main() {
 
     //Diagnose normals
     // outColor = vec4((normal.x + 1.0) / 2.0, (normal.y + 1.0) / 2.0, (normal.z + 1.0) / 2.0, 1.0);
+    // outColor = vec4((tangent.x + 1.0) / 2.0, (tangent.y + 1.0) / 2.0, (tangent.z + 1.0) / 2.0, 1.0);
+
+    //Diagnose UVs
+    // outColor = vec4(fragUv.r, fragUv.g, 1.0, 1.0);
 
     outColor = vec4(fragColor * texture(tex[0], fragUv).rgb * light_color, 1.0);
 }
