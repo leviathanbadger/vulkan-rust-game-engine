@@ -21,6 +21,7 @@ use vulkanalia::{
     prelude::v1_0::*,
     vk::{KhrSurfaceExtension, StringArray, KhrSwapchainExtension}
 };
+use nalgebra_glm as glm;
 
 use crate::{
     app_data::{AppData, VulkanQueueInfo},
@@ -28,7 +29,8 @@ use crate::{
     shader_input::uniform_buffer_object::{UniformBufferObject, PostprocessingUniformBufferObject},
     game::scene::{Scene},
     frame_info::{FrameInfo},
-    resources::{SingleFrameRenderInfo, ResourceLoader, SingleModelRenderInfo, Material}
+    resources::{SingleFrameRenderInfo, ResourceLoader, SingleModelRenderInfo, Material},
+    util::jitter_generator::{JitterGenerator}
 };
 
 #[derive(Debug, Error)]
@@ -50,6 +52,7 @@ pub struct App {
     pub scene: Box<Scene>,
     pub resource_loader: ResourceLoader,
     pub frame_info: FrameInfo,
+    pub jitter_info: JitterGenerator,
 
     destroying: bool,
     needs_new_swapchain: bool,
@@ -114,6 +117,7 @@ impl App {
             scene: Box::new(scene),
             resource_loader,
             frame_info: FrameInfo::default(),
+            jitter_info: Default::default(),
 
             destroying: false,
             needs_new_swapchain: false,
@@ -468,6 +472,7 @@ impl App {
             self.frame_info.current_frame_delta_time = self.frame_info.current_frame_time - self.frame_info.last_frame_start_time;
             self.scene.tick(&self.frame_info)?;
             self.frame_info.last_frame_start_time = self.frame_info.current_frame_time;
+            self.jitter_info.next();
 
             {
                 self.scene.load_and_unload(&mut self.resource_loader)?;
@@ -583,6 +588,7 @@ impl App {
     }
 
     fn update_uniform_buffer(&mut self, image_index: usize, frame_info: &SingleFrameRenderInfo) -> Result<()> {
+        let render_resolution = self.app_data.render_images.as_ref().unwrap().base_render_extent;
         let buffer = &mut self.app_data.uniforms.as_mut().unwrap().uniform_buffers[image_index];
 
         let ubo = UniformBufferObject {
@@ -593,6 +599,10 @@ impl App {
             directional_light_direction: frame_info.directional_light_direction,
             frame_index: frame_info.frame_index,
             time_in_seconds: frame_info.time_in_seconds,
+
+            jitter_scale: 1.0,
+            jitter: self.jitter_info.current_jitter,
+            resolution: glm::vec2(render_resolution.width as f32, render_resolution.height as f32),
 
             ..Default::default() //Necessary for the manual padding
         };
@@ -824,18 +834,16 @@ impl App {
     }
 }
 
-//TODO: decouple render target format from swapchain format
 //TODO: learn to use (and actually use) HDR color space
 //TODO: render at a lower resolution than the swapchain-created images
 //TODO: add asynchronous loading of assets; move asset loading onto other threads (placeholder models/textures if things don't load fast enough)
-
 //TODO: only create one sampler resource, not one per image
 //TODO: use bindless rendering to support multiple textures
-//TODO: deprecate static_screen_space shader, or update it to use screen coordinates and support textures/ETC
+//TODO: add support for DLSS2
+
 //TODO: single location for GPU memory management (allocation/freeing)
 //TODO: improve game object abstraction
 //TODO: add support for keyboard/mouse input
-//TODO: add support for DLSS2
 //TODO: add support for FSR2
 //TODO: add support for fullscreen
 //TODO: make texture loading asynchronous - remove usages of queue_wait_idle in favor of proper synchronization

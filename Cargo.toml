@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1"
 ctrlc = { version = "3.2", features = ["termination"] }
+halton = "0.2.1"
 lazy_static = "1"
 log = "0.4"
 nalgebra-glm = "0.10"

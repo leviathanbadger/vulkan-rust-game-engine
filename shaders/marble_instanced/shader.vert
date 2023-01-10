@@ -6,6 +6,9 @@ layout(binding = 0) uniform UniformBufferObject {
     vec3 ambient_light;
     vec3 directional_light_direction;
     vec3 directional_light_color;
+    vec2 resolution;
+    vec2 jitter;
+    float jitter_scale;
     uint frame_index;
     float time_in_seconds;
 } ubo;
@@ -25,8 +28,16 @@ layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec4 fragColor;
 
 void main() {
+    mat4 jitter = mat4(1.0);
+    if (ubo.jitter_scale > 0) {
+        float deltaWidth = 1.0 / ubo.resolution.x;
+        float deltaHeight = 1.0 / ubo.resolution.y;
+        jitter[3][0] += ubo.jitter.x * deltaWidth * ubo.jitter_scale;
+        jitter[3][1] += ubo.jitter.y * deltaHeight * ubo.jitter_scale;
+    }
+
     currentFragPositionCameraSpace = pcs.viewmodel * inTransform * vec4(inPosition, 1.0);
-    gl_Position = ubo.proj * currentFragPositionCameraSpace;
+    gl_Position = jitter * ubo.proj * currentFragPositionCameraSpace;
 
     fragNormal = (pcs.normal_viewmodel * transpose(inverse(inTransform)) * vec4(inNormal, 1.0)).rgb;
     fragColor = inColor;

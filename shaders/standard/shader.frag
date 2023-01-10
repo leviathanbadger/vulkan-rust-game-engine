@@ -6,6 +6,9 @@ layout(binding = 0) uniform UniformBufferObject {
     vec3 ambient_light;
     vec3 directional_light_direction;
     vec3 directional_light_color;
+    vec2 resolution;
+    vec2 jitter;
+    float jitter_scale;
     uint frame_index;
     float time_in_seconds;
 } ubo;
