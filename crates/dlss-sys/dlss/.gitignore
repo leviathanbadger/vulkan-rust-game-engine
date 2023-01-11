@@ -1,0 +1,11 @@
+*
+!.gitignore
+!include
+!include/dlss-wrapper.h
+!include/.gitkeep
+!lib
+!lib/.gitkeep
+
+# To use this, you must provide your own files for DLSS, downloaded from NVidia's developer site.
+# Copy the header files into the "include" directory
+# Copy nvngx_dlss.dll and nvsdk_ngx_s.lib into the "lib" directory

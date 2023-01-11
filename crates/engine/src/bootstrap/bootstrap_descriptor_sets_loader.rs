@@ -1,4 +1,5 @@
 use super::{BootstrapLoader, BootstrapUniformLoader, BootstrapCommandBufferLoader, CommandPoolsInfo};
+
 use std::{
     mem::{size_of},
     fs::{File}
@@ -39,7 +40,7 @@ bootstrap_loader! {
 
 impl BootstrapDescriptorSetLoader {
     fn load_image(&self, path: &'static str, device: &Device, memory_properties: &vk::PhysicalDeviceMemoryProperties, command_pools_info: &CommandPoolsInfo, is_srgb: bool) -> Result<Image2D> {
-        let image_file = File::open(path).map_err(|_| anyhow!("Problem loading PNG file at \"{:?}\"", path))?;
+        let image_file = File::open(path).map_err(|_| anyhow!("Problem loading PNG file at {:?}", path))?;
 
         let mut decoder = png::Decoder::new(image_file);
         decoder.set_ignore_text_chunk(true);

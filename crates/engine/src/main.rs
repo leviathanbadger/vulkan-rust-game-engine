@@ -28,7 +28,8 @@ fn main() -> Result<()> {
     let mut builder = App::builder()
         .initial_title("Vulkan-rust Test App")
         .default_size(LogicalSize::new(1920, 1080))
-        .add_default_bootstrap_loaders();
+        .add_default_bootstrap_loaders()
+        .add_dlss();
 
     if VALIDATION_ENABLED {
         builder = builder.add_validation();

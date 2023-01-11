@@ -30,7 +30,10 @@ use crate::{
     game::scene::{Scene},
     frame_info::{FrameInfo},
     resources::{SingleFrameRenderInfo, ResourceLoader, SingleModelRenderInfo, Material},
-    util::jitter_generator::{JitterGenerator}
+    util::{
+        jitter_generator::{JitterGenerator},
+        vec_from_hash_set::{vec_from_hash_set}
+    }
 };
 
 #[derive(Debug, Error)]
@@ -87,8 +90,8 @@ impl App {
         unsafe {
             debug!("Selecting graphics card (physical device) and creating logical device...");
 
-            let mut request_layers_ptrs = vec![];
-            let mut request_extensions_ptrs = vec![];
+            let mut request_layers_ptrs = HashSet::new();
+            let mut request_extensions_ptrs = HashSet::new();
             for loader in bootstrap_loaders.iter() {
                 loader.add_required_device_layers(&mut request_layers_ptrs)?;
                 loader.add_required_device_extensions(&mut request_extensions_ptrs)?;
@@ -141,12 +144,12 @@ impl App {
             .api_version(vk::make_version(0, 0, 1));
         trace!("Vulkan app_info created to present to create_instance. App Name: {:?}; Engine Name: {:?}", CStr::from_ptr(app_info.application_name), CStr::from_ptr(app_info.engine_name));
 
-        let mut request_layers_ptrs = vec![];
+        let mut request_layers_ptrs = HashSet::new();
 
         let mut request_extensions_ptrs = vk_window::get_required_instance_extensions(window)
             .iter()
             .map(|n| n.as_ptr())
-            .collect::<Vec<_>>();
+            .collect::<HashSet<_>>();
 
         for loader in bootstrap_loaders.iter() {
             loader.add_required_instance_layers(&mut request_layers_ptrs)?;
@@ -156,10 +159,12 @@ impl App {
         Self::check_instance(entry, &request_layers_ptrs, &request_extensions_ptrs)?;
 
         debug!("Creating Vulkan instance with requested layers and extensions...");
+        let request_layer_ptrs_vec = vec_from_hash_set(&request_layers_ptrs)?;
+        let request_ext_ptrs_vec = vec_from_hash_set(&request_extensions_ptrs)?;
         let inst_info = vk::InstanceCreateInfo::builder()
             .application_info(&app_info)
-            .enabled_layer_names(&request_layers_ptrs)
-            .enabled_extension_names(&request_extensions_ptrs);
+            .enabled_layer_names(&request_layer_ptrs_vec)
+            .enabled_extension_names(&request_ext_ptrs_vec);
 
         let last_callback = move |inst_info: vk::InstanceCreateInfoBuilder| -> Result<Instance> {
             trace!("Final callback. Creating Vulkan instance...");
@@ -187,7 +192,7 @@ impl App {
         Ok(inst)
     }
 
-    unsafe fn check_instance(entry: &Entry, request_layers_ptrs: &Vec<*const i8>, request_extensions_ptrs: &Vec<*const i8>) -> Result<()> {
+    unsafe fn check_instance(entry: &Entry, request_layers_ptrs: &HashSet<*const i8>, request_extensions_ptrs: &HashSet<*const i8>) -> Result<()> {
         let available_layers = entry
             .enumerate_instance_layer_properties()?
             .iter()
@@ -227,7 +232,7 @@ impl App {
         Ok(())
     }
 
-    unsafe fn select_graphics_card(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &mut AppData, request_layers_ptrs: &Vec<*const i8>, request_extensions_ptrs: &Vec<*const i8>) -> Result<()> {
+    unsafe fn select_graphics_card(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &mut AppData, request_layers_ptrs: &HashSet<*const i8>, request_extensions_ptrs: &HashSet<*const i8>) -> Result<()> {
         let physical_devices = inst.enumerate_physical_devices()?;
 
         for physical_device in physical_devices {
@@ -247,7 +252,7 @@ impl App {
         Err(anyhow!(GraphicsCardSuitabilityError("No suitable graphics card was found")))
     }
 
-    unsafe fn check_graphics_card(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &AppData, physical_device: vk::PhysicalDevice, request_layers_ptrs: &Vec<*const i8>, request_extensions_ptrs: &Vec<*const i8>) -> Result<()> {
+    unsafe fn check_graphics_card(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &AppData, physical_device: vk::PhysicalDevice, request_layers_ptrs: &HashSet<*const i8>, request_extensions_ptrs: &HashSet<*const i8>) -> Result<()> {
         //Check for layers and extensions before calling check_physical_device_compatibility. Some bootstrap loaders assume their requested extensions are already confirmed to be present
         Self::check_physical_device(inst, physical_device, request_layers_ptrs, request_extensions_ptrs, false)?;
 
@@ -269,7 +274,7 @@ impl App {
         Ok(())
     }
 
-    unsafe fn create_logical_device(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &mut AppData, request_layers_ptrs: &Vec<*const i8>, request_extensions_ptrs: &Vec<*const i8>) -> Result<Device> {
+    unsafe fn create_logical_device(inst: &Instance, bootstrap_loaders: &Vec<Box<dyn BootstrapLoader>>, app_data: &mut AppData, request_layers_ptrs: &HashSet<*const i8>, request_extensions_ptrs: &HashSet<*const i8>) -> Result<Device> {
         let physical_device = app_data.physical_device.unwrap();
         let indices = QueueFamilyIndices::get(&inst, app_data, physical_device)?;
 
@@ -299,10 +304,12 @@ impl App {
         Self::check_physical_device(inst, physical_device, request_layers_ptrs, request_extensions_ptrs, true)?;
 
         debug!("Creating Vulkan logical device with requested layers and features.");
+        let request_layers_ptrs_vec = vec_from_hash_set(request_layers_ptrs)?;
+        let request_ext_ptrs_vec = vec_from_hash_set(request_extensions_ptrs)?;
         let device_info = vk::DeviceCreateInfo::builder()
             .queue_create_infos(&queue_infos)
-            .enabled_layer_names(&request_layers_ptrs)
-            .enabled_extension_names(&request_extensions_ptrs)
+            .enabled_layer_names(&request_layers_ptrs_vec)
+            .enabled_extension_names(&request_ext_ptrs_vec)
             .enabled_features(&features);
 
         let device = inst.create_device(physical_device, &device_info, None)?;
@@ -323,7 +330,7 @@ impl App {
         Ok(device)
     }
 
-    unsafe fn check_physical_device(inst: &Instance, physical_device: vk::PhysicalDevice, request_layers_ptrs: &Vec<*const i8>, request_extensions_ptrs: &Vec<*const i8>, log_check: bool) -> Result<()> {
+    unsafe fn check_physical_device(inst: &Instance, physical_device: vk::PhysicalDevice, request_layers_ptrs: &HashSet<*const i8>, request_extensions_ptrs: &HashSet<*const i8>, log_check: bool) -> Result<()> {
         let available_layers = inst
             .enumerate_device_layer_properties(physical_device)?
             .iter()

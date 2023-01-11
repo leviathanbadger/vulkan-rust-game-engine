@@ -134,7 +134,7 @@ impl BootstrapRenderImagesLoader {
 impl BootstrapLoader for BootstrapRenderImagesLoader {
     fn after_create_logical_device(&self, inst: &Instance, device: &Device, _window: &Window, app_data: &mut AppData) -> Result<()> {
         let mut render_images_info = RenderImagesInfo::default();
-        self.select_base_render_extent(&mut render_images_info, app_data);
+        self.select_base_render_extent(&mut render_images_info, app_data)?;
         self.create_depth_objects(inst, device, &mut render_images_info, app_data)?;
         self.create_render_images(inst, device, &mut render_images_info, app_data)?;
         self.create_motion_vector_buffers(inst, device, &mut render_images_info, app_data)?;

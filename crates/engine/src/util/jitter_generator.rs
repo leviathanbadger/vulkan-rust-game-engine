@@ -27,7 +27,7 @@ impl Default for JitterGenerator {
 impl JitterGenerator {
     pub fn next(&mut self) -> glm::Vec2 {
         let (q, w) = self.halton_sequence.next().unwrap();
-        self.current_jitter = glm::vec2(q as f32, w as f32);
+        self.current_jitter = glm::vec2(q as f32 - 0.5, w as f32 - 0.5);
 
         self.current_jitter
     }

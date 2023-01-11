@@ -1,5 +1,6 @@
 use super::{BootstrapLoader};
 
+use std::collections::{HashSet};
 use anyhow::{anyhow, Result};
 use winit::window::{Window};
 use vulkanalia::{
@@ -199,15 +200,15 @@ impl BootstrapSwapchainLoader {
 }
 
 impl BootstrapLoader for BootstrapSwapchainLoader {
-    fn add_required_instance_extensions(&self, required_extensions: &mut Vec<*const i8>) -> Result<()> {
+    fn add_required_instance_extensions(&self, required_extensions: &mut HashSet<*const i8>) -> Result<()> {
         //Required after driver update for some reason
-        required_extensions.push(vk::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2_EXTENSION.name.as_ptr());
+        required_extensions.insert(vk::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2_EXTENSION.name.as_ptr());
 
         Ok(())
     }
 
-    fn add_required_device_extensions(&self, required_extensions: &mut Vec<*const i8>) -> Result<()> {
-        required_extensions.push(vk::KHR_SWAPCHAIN_EXTENSION.name.as_ptr());
+    fn add_required_device_extensions(&self, required_extensions: &mut HashSet<*const i8>) -> Result<()> {
+        required_extensions.insert(vk::KHR_SWAPCHAIN_EXTENSION.name.as_ptr());
 
         Ok(())
     }

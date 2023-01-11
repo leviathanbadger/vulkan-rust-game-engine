@@ -1,6 +1,9 @@
 use anyhow::{Result};
 use winit::window::Window;
-use std::fmt::{Debug};
+use std::{
+    fmt::{Debug},
+    collections::{HashSet}
+};
 use vulkanalia::{
     prelude::v1_0::*,
     vk::{InstanceCreateInfoBuilder, PhysicalDeviceFeaturesBuilder, PhysicalDeviceProperties, PhysicalDeviceFeatures}
@@ -17,10 +20,10 @@ pub trait IndirectDependency {
 }
 
 pub trait BootstrapLoader : Debug + IndirectDependency {
-    fn add_required_instance_layers(&self, _required_layers: &mut Vec<*const i8>) -> Result<()> {
+    fn add_required_instance_layers(&self, _required_layers: &mut HashSet<*const i8>) -> Result<()> {
         Ok(())
     }
-    fn add_required_instance_extensions(&self, _required_extensions: &mut Vec<*const i8>) -> Result<()> {
+    fn add_required_instance_extensions(&self, _required_extensions: &mut HashSet<*const i8>) -> Result<()> {
         Ok(())
     }
     fn instance_create(&self, inst_info: InstanceCreateInfoBuilder, app_data: &mut AppData, next: &dyn Fn(InstanceCreateInfoBuilder, &mut AppData) -> Result<Instance>) -> Result<Instance> {
@@ -29,10 +32,10 @@ pub trait BootstrapLoader : Debug + IndirectDependency {
     }
     fn before_destroy_instance(&self, _inst: &Instance, _app_data: &mut AppData) -> () { }
 
-    fn add_required_device_layers(&self, _required_layers: &mut Vec<*const i8>) -> Result<()> {
+    fn add_required_device_layers(&self, _required_layers: &mut HashSet<*const i8>) -> Result<()> {
         Ok(())
     }
-    fn add_required_device_extensions(&self, _required_extensions: &mut Vec<*const i8>) -> Result<()> {
+    fn add_required_device_extensions(&self, _required_extensions: &mut HashSet<*const i8>) -> Result<()> {
         Ok(())
     }
     fn add_required_device_features(&self, _features: &mut PhysicalDeviceFeaturesBuilder) -> Result<()> {

@@ -116,8 +116,8 @@ impl Default for BlendStateDescriptor {
 }
 
 pub fn create_shader_sources(stage: &'static str, shader_name: &'static str, suffix: &'static str, shader_entry: &'static str) -> ShaderSources {
-    let vertex_path_str = format!("shaders/{}{}{}/shader.vert.spv", stage, shader_name, suffix).to_owned();
-    let fragment_path_str = format!("shaders/{}{}{}/shader.frag.spv", stage, shader_name, suffix).to_owned();
+    let vertex_path_str = format!("crates/engine/shaders/{}{}{}/shader.vert.spv", stage, shader_name, suffix).to_owned();
+    let fragment_path_str = format!("crates/engine/shaders/{}{}{}/shader.frag.spv", stage, shader_name, suffix).to_owned();
 
     ShaderSources {
         vertex: ShaderSource::SourcePath(vertex_path_str, shader_entry),

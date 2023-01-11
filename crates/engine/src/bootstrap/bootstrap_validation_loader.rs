@@ -1,6 +1,10 @@
-use super::BootstrapLoader;
+use super::{BootstrapLoader};
 
-use std::{os::raw::c_void, ffi::CStr};
+use std::{
+    os::raw::{c_void},
+    ffi::{CStr},
+    collections::{HashSet}
+};
 use anyhow::{Result};
 use vulkanalia::{
     prelude::v1_0::*,
@@ -48,14 +52,14 @@ extern "system" fn debug_callback(
 }
 
 impl BootstrapLoader for BootstrapValidationLoader {
-    fn add_required_instance_layers(&self, required_layers: &mut Vec<*const i8>) -> Result<()> {
-        required_layers.push(VALIDATION_LAYER.as_ptr());
+    fn add_required_instance_layers(&self, required_layers: &mut HashSet<*const i8>) -> Result<()> {
+        required_layers.insert(VALIDATION_LAYER.as_ptr());
 
         Ok(())
     }
 
-    fn add_required_instance_extensions(&self, required_extensions: &mut Vec<*const i8>) -> Result<()> {
-        required_extensions.push(vk::EXT_DEBUG_UTILS_EXTENSION.name.as_ptr());
+    fn add_required_instance_extensions(&self, required_extensions: &mut HashSet<*const i8>) -> Result<()> {
+        required_extensions.insert(vk::EXT_DEBUG_UTILS_EXTENSION.name.as_ptr());
 
         Ok(())
     }
@@ -91,8 +95,8 @@ impl BootstrapLoader for BootstrapValidationLoader {
         }
     }
 
-    fn add_required_device_layers(&self, required_layers: &mut Vec<*const i8>) -> Result<()> {
-        required_layers.push(VALIDATION_LAYER.as_ptr());
+    fn add_required_device_layers(&self, required_layers: &mut HashSet<*const i8>) -> Result<()> {
+        required_layers.insert(VALIDATION_LAYER.as_ptr());
 
         Ok(())
     }

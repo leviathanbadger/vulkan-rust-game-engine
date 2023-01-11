@@ -8,6 +8,7 @@ use crate::{
         BootstrapCommandBufferLoader,
         BootstrapRenderImagesLoader,
         BootstrapDescriptorSetLoader,
+        BootstrapDlssLoader,
         BootstrapFramebufferLoader,
         BootstrapPipelineLoader,
         BootstrapSwapchainLoader,
@@ -65,6 +66,10 @@ impl AppBuilder {
             .add_bootstrap_loader(Box::new(BootstrapFramebufferLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapSyncObjectsLoader::new()))
             .add_bootstrap_loader(Box::new(BootstrapDescriptorSetLoader::new()))
+    }
+
+    pub fn add_dlss(self) -> Self {
+        self.add_bootstrap_loader(Box::new(BootstrapDlssLoader::new()))
     }
 
     pub fn add_validation(self) -> Self {

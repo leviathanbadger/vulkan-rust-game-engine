@@ -1,6 +1,6 @@
-use std::io::{Read};
-
 use super::{get_memory_type_index, Buffer};
+
+use std::io::{Read};
 use anyhow::{anyhow, Result};
 use png::ColorType;
 use vulkanalia::{

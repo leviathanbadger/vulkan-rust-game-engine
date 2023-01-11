@@ -24,7 +24,7 @@ pub fn create_scene(scene: &mut Box<Scene>) -> Result<()> {
     });
 
     let mut game_object = Box::new(GameObject::new());
-    game_object.add_component(Box::new(RotateOverTimeComponent::new()))?;
+    // game_object.add_component(Box::new(RotateOverTimeComponent::new()))?;
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/die/die-with-uvs.obj")?))?;
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/viking-room/viking-room.obj")?))?;
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/coords/coords.obj")?))?;
