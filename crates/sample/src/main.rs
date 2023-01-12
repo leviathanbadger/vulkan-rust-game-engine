@@ -1,20 +1,14 @@
-mod bootstrap;
-mod resources;
-mod game;
+mod components;
 mod scenes;
 mod shader_input;
-mod util;
-
-mod app_data;
-mod app;
-mod builder;
-mod frame_info;
 
 use anyhow::{Result};
 use winit::dpi::{LogicalSize};
 
-use builder::{HasHeapBuilder};
-use app::{App};
+use engine::{
+    builder::{HasHeapBuilder},
+    app::{App}
+};
 
 use scenes::{marbles};
 
@@ -24,9 +18,10 @@ const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
 
 fn main() -> Result<()> {
     pretty_env_logger::init();
+    info!("Sample app starting up...");
 
     let mut builder = App::builder()
-        .initial_title("Vulkan-rust Test App")
+        .initial_title("Rust Engine Sample App")
         .default_size(LogicalSize::new(1920, 1080))
         .add_default_bootstrap_loaders()
         .add_dlss();

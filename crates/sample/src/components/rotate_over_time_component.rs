@@ -1,11 +1,10 @@
-use super::{GameComponent};
-
 use nalgebra_glm as glm;
 use anyhow::{Result};
 
-use crate::{
+use engine::{
     frame_info::{FrameInfo},
     game::{
+        components::{GameComponent},
         can_be_enabled::{CanBeEnabled},
         transform::{Transform, DEFAULT_UP}
     }

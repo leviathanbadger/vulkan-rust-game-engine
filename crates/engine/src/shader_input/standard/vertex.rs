@@ -7,12 +7,14 @@ use crate::{
 };
 
 vertex_type!{
+    use crate as engine;
+
     pub struct Vertex {
-        pos: Vec3,
-        normal: Vec3,
-        tangent: Vec3,
-        color: Vec3,
-        uv: Vec2
+        pos: glm::Vec3,
+        normal: glm::Vec3,
+        tangent: glm::Vec3,
+        color: glm::Vec3,
+        uv: glm::Vec2
     }
 }
 

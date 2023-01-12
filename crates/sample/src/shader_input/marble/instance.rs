@@ -1,20 +1,21 @@
 use lazy_static::lazy_static;
 use nalgebra_glm as glm;
-
-use crate::{
+use engine::{
     vertex_type,
     game::transform::{Transform},
     resources::{CanBeInstVertexBufferType}
 };
 
 vertex_type! {
+    use engine as engine;
+
     pub struct MarbleInstance {
         binding 1;
         location 2;
         instance true;
 
-        color: Vec4,
-        transform: Mat4
+        color: glm::Vec4,
+        transform: glm::Mat4
     }
 }
 

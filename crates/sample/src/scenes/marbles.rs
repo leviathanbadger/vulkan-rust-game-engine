@@ -1,15 +1,16 @@
 use anyhow::{Result};
 use nalgebra_glm as glm;
-
-use crate::{
+use engine::{
     game::{
         scene::{Scene},
         lights::{DirectionalLight},
         game_object::{GameObject},
-        components::{RotateOverTimeComponent, RenderMarbleComponent, RenderModelComponent}
+        components::{RenderModelComponent}
     },
     shader_input::{standard}
 };
+
+use crate::components::{RenderMarbleComponent, RotateOverTimeComponent};
 
 pub fn create_scene(scene: &mut Box<Scene>) -> Result<()> {
     // scene.render_camera.transform.pos = glm::vec3(5.0, 5.0, 3.0);
@@ -24,7 +25,7 @@ pub fn create_scene(scene: &mut Box<Scene>) -> Result<()> {
     });
 
     let mut game_object = Box::new(GameObject::new());
-    // game_object.add_component(Box::new(RotateOverTimeComponent::new()))?;
+    game_object.add_component(Box::new(RotateOverTimeComponent::new()))?;
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/die/die-with-uvs.obj")?))?;
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/viking-room/viking-room.obj")?))?;
     // game_object.add_component(Box::new(RenderModelComponent::<simple::Vertex>::new("resources/models/coords/coords.obj")?))?;

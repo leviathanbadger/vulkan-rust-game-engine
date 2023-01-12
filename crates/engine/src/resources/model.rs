@@ -13,7 +13,10 @@ use vulkanalia::{
     prelude::v1_0::*
 };
 
-use crate::shader_input::vertex_attribute_builder::{EmptyVertex, HasVertexAttributeBindings};
+use crate::shader_input::{
+    empty_vertex::{EmptyVertex},
+    vertex_attribute_builder::{HasVertexAttributeBindings}
+};
 
 pub trait CanBeVertexBufferType : HasVertexAttributeBindings + Copy + Clone + Default + Hash + PartialEq + Eq + ::std::fmt::Debug {
     fn create_vertex_from_opts(pos: glm::Vec3, normal: Option<glm::Vec3>, color: Option<glm::Vec3>, uv: Option<glm::Vec2>, face_normal: Option<glm::Vec3>, face_tangent: Option<glm::Vec3>) -> Self;

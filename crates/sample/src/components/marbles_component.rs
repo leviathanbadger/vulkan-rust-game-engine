@@ -1,13 +1,14 @@
-use super::{GameComponent};
-
 use nalgebra_glm as glm;
 use anyhow::{Result};
-
-use crate::{
+use engine::{
     game::{
+        components::{GameComponent},
         can_be_enabled::{CanBeEnabled}
     },
-    resources::{SingleFrameRenderInfo, ModelRef, MaterialRef, MaterialProperties, ModelProperties, ResourceLoader, Buffer},
+    resources::{SingleFrameRenderInfo, ModelRef, MaterialRef, MaterialProperties, ModelProperties, ResourceLoader, Buffer}
+};
+
+use crate::{
     shader_input::marble::{self, MARBLE_INSTANCES}
 };
 

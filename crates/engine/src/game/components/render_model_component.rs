@@ -9,7 +9,7 @@ use crate::{
         can_be_enabled::{CanBeEnabled}
     },
     resources::{CanBeVertexBufferType, CanBeInstVertexBufferType, SingleFrameRenderInfo, MaterialRef, ModelRef, MaterialProperties, ModelProperties, ResourceLoader},
-    shader_input::vertex_attribute_builder::{EmptyVertex}
+    shader_input::empty_vertex::{EmptyVertex}
 };
 
 #[derive(Debug)]

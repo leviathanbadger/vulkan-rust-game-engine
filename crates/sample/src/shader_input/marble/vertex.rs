@@ -1,15 +1,16 @@
 use nalgebra_glm as glm;
 use lazy_static::{lazy_static};
-
-use crate::{
+use engine::{
     vertex_type,
     resources::{CanBeVertexBufferType}
 };
 
 vertex_type!{
+    use engine as engine;
+
     pub struct Vertex {
-        pos: Vec3,
-        normal: Vec3
+        pos: glm::Vec3,
+        normal: glm::Vec3
     }
 }
 

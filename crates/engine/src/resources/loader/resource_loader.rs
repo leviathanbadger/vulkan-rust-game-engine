@@ -19,7 +19,7 @@ use vulkanalia::{
 };
 
 use crate::{
-    shader_input::vertex_attribute_builder::{EmptyVertex},
+    shader_input::empty_vertex::{EmptyVertex},
     resources::{
         CanBeVertexBufferType,
         CanBeInstVertexBufferType,

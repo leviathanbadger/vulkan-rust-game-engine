@@ -32,7 +32,7 @@ use crate::{
     resources::{SingleFrameRenderInfo, ResourceLoader, SingleModelRenderInfo, Material},
     util::{
         jitter_generator::{JitterGenerator},
-        vec_from_hash_set::{vec_from_hash_set}
+        {vec_from_hash_set}
     }
 };
 

@@ -7,9 +7,11 @@ use crate::{
 };
 
 vertex_type!{
+    use crate as engine;
+
     pub struct Vertex {
-        pos: Vec2,
-        uv: Vec2
+        pos: glm::Vec2,
+        uv: glm::Vec2
     }
 }
 
